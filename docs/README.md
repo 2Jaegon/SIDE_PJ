@@ -1,74 +1,95 @@
-# 🌐 전국민 AI 평준화 플랫폼 (Project: Gon)
+# Gon: 전국민 AI 평준화 플랫폼
 
-> **"누구나 1줄의 질문만으로 상위 1% 프롬프트 전문가와 디자이너의 결과물을 얻는 세상"**  
-> AI 활용 역량 격차(Prompt/Skill Gap)를 해소하는 지능형 스킬 라우팅 & 리터러시 서비스
+사용자가 한 줄의 자연어 요청을 입력하면 최적의 AI 전문가 팀을 편성해 작업을 수행하고, 단일 산출물로 종합한 뒤 다음 질의를 위한 프롬프트 코칭까지 제공하는 멀티 에이전트 서비스다.
 
----
-
-## 1. 추진 배경 및 필요성 (Background)
-* **문제점 (Prompt Gap):** AI 모델의 성능은 상향 평준화되었으나, 프롬프트 엔지니어링 역량과 워크플로우 구성 능력에 따라 일반 사용자와 전문가 간의 결과물 품질 차이가 극심하게 벌어지고 있음.
-* **사용자 고통 (User Pain Point):** 일반 대중은 무엇을 어떻게 질문해야 할지 모르며, AI가 주는 모호한 답변에 실망하고 이탈하는 현상 발생.
-* **해결책 (Solution):** 사용자의 불완전한 자연어 요청을 분석하여, 사전에 검증된 최적의 **AI Skill 클러스터를 자동으로 찾아 장착(Mount)**하고 실행해주는 지능형 중개 플랫폼.
+저장소 전체가 Gon이며, 비서 에이전트(`Gon/`)와 웹 서비스(`backend/`, `frontend/`)가 같은 스킬·프롬프트 풀을 공유해 동작한다.
 
 ---
 
-## 2. 서비스 핵심 기능 (Key Features)
+## 1. 요청 처리 흐름
 
 ```mermaid
-flowchart LR
-    A["1. 사용자 자연어 입력\n(1줄 모호한 요청)"] --> B["2. 의도 분석 & 스킬 라우터\n(Intent & Skill Matcher)"]
-    B --> C["3. 스킬 주입 & 오케스트레이션\n(Chain of Expert Skills)"]
-    C --> D["4. 전문가급 결과물 출력\n+ 리터러시 성장 팁"]
+flowchart TD
+    User["사용자 요청 (자연어)"] --> Lead["1. 총괄 편성 (Lead)"]
+    Lead --> Parallel["2. 전문가 병렬 작업 (Parallel Workers)"]
+    Lead --> Coach["2-1. 프롬프트 코칭 생성"]
+    Parallel --> Synthesis["3. 총괄 종합 (Synthesis)"]
+    Coach --> Final["4. 최종 산출물 + 리터러시 팁"]
+    Synthesis --> Final
 ```
 
-1. **지능형 의도 분석기 (Intent Clarifier):**
-   - 모호한 입력을 분석하여 핵심 목적, 타깃, 톤앤매너 등 누락된 맥락을 스스로 보정하거나 가벼운 선택형 역질문 제공.
-2. **동적 멀티-스킬 라우팅 (Skill Orchestrator):**
-   - 수집된 지식 네트워크(기획, 마케팅, UI/UX, 코딩, 리서치 등)에서 최적의 스킬 3~5개를 자동 결합.
-3. **투명한 스킬 프로세스 시각화 (Thinking UI):**
-   - 어떤 스킬이 적용되어 작업 중인지 실시간 오브(Thinking Orb) 및 상태 인디케이터로 시각화.
-4. **AI 리터러시 사후 교육 (Prompt Coach):**
-   - 결과물 하단에 *"다음번에는 이렇게 질문해보세요!"* 팁을 제공하여 사용자의 프롬프트 역량을 자연스럽게 상향 평준화.
+1. **편성 (Planning)**
+   - 담당: `backend/app/core/pipeline.py` (`_plan_prompt`, `_keyword_plan`), `backend/app/core/experts.py`
+   - 총괄(Gon)이 전체 전문가 풀(스킬 43개 + 프롬프트 3개)의 직함과 설명을 검토해 필요한 인원(최대 `GON_MAX_EXPERTS`명)과 과업(task)을 배정한다.
+   - 사용자가 화면(`RosterDrawer`)에서 전문가를 직접 지정한 경우 최우선으로 편성한다.
+   - AI 미연결 또는 응답 실패 시 키워드 매칭과 시너지 관계 기반 대체 로직(`_keyword_plan`)으로 자동 전환된다.
+2. **전문가 병렬 작업 (Parallel Execution)**
+   - 담당: `backend/app/core/pipeline.py`, `backend/app/core/llm.py`
+   - 배정된 각 전문가는 스킬 지침(YAML 헤더 제거, 3000자 발췌)과 공통 규칙(`Core 1~4`)을 근거로 독립적인 텍스트 결과물을 작성한다.
+   - `ThreadPoolExecutor`를 통해 지정된 워커 수(`GON_LLM_WORKERS`)만큼 병렬로 비동기 실행된다.
+   - 이 과정에서 사용자의 후속 질의 역량을 돕기 위한 프롬프트 개선 팁(`_coach_prompt`)도 함께 생성된다.
+   - 전문가 작업이 완료되거나 에러가 발생하면 실시간 NDJSON 스트림(`type: agent`)으로 화면에 즉시 전달된다.
+3. **종합 (Synthesis)**
+   - 담당: `backend/app/core/pipeline.py` (`_synthesis_prompt`)
+   - 총괄 편집자가 각 전문가의 결과물을 수합하여 모순점을 정리하고 하나의 완성된 산출물로 통합한다.
+   - 미확인 사실 날조 금지, 출처와 가정 명시 등 `Core 1~4` 원칙을 적용해 최종 결과(`type: final`)를 반환한다.
 
 ---
 
-## 3. 시스템 아키텍처 및 기술 스택 (Tech Stack)
+## 2. API 엔드포인트
 
-### Backend (`backend/`)
-- **Framework:** FastAPI (Python 3.10+)
-- **Core Engine:** Gon Orchestration Engine (`Gon/workspace/orchestrator.py`)
-- **LLM Provider:** Google Gemini API / OpenAI / Free LLM API
-- **Key Modules:**
-  - `/api/skills` : 스킬 레지스트리 카탈로그 조회
-  - `/api/route` : 사용자 의도 분석 및 최적 스킬 추천
-  - `/api/generate` : 스킬 주입 기반 스트리밍 결과 생성
+| 메서드 | 경로 | 설명 | 요청 본문 | 응답 형태 |
+|---|---|---|---|---|
+| `GET` | `/health` | 서버 상태 점검 | 없음 | `{"service": "Gon API", "status": "online", "version": "1.0.0", "mission": "..."}` |
+| `GET` | `/api/office/pool` | 전문가 풀 현황 및 통계 | 없음 | `{"total": 46, "clusters": {...}, "mode": "ai"\|"stub", "max_experts": 8}` |
+| `GET` | `/api/office/experts` | 46명 전체 전문가 카탈로그 | 없음 | `{"experts": [{"id": "...", "name": "...", "kind": "...", "cluster": "...", "accent": "...", "use_for": "..."}]}` |
+| `POST` | `/api/office/dispatch-stream` | 멀티 에이전트 실행 및 NDJSON 스트리밍 | `{"query": "요청문", "selected_expert_ids": ["id1", "id2"]}` (선택 배열 생략 가능) | `application/x-ndjson` (이벤트 순서: `start` → `plan` → `agent`... → `synthesis` → `final`) |
 
-### Frontend (`frontend/`)
-- **Framework:** React (Vite) + TypeScript
-- **Styling:** Tailwind CSS + Lucide Icons
-- **Visual & UI Taste:** `thinking-orbs`, `OriginKit`, `shadergradient`
-- **UX Goal:** 복잡한 설정을 배제하고, 검색창 중심의 극단적 미니멀리즘 인터페이스
+> `backend/app/core/orchestrator.py` 및 구버전 엔드포인트(`/api/skills`, `/api/route`, `/api/generate`)는 레거시 코드로 현재 프런트엔드에서 호출하지 않으며 정리 예정이다.  
+> `GET /api/office/layout`은 이전 브라우저 탭 세션과의 호환을 위한 임시 응답이다.
 
 ---
 
-## 4. 디렉토리 구조 (Directory Structure)
-```
-side_pj/
-├── backend/                # FastAPI 백엔드 서버
-│   ├── app/
-│   │   ├── api/            # REST API 엔드포인트
-│   │   ├── core/           # 스킬 라우터 & LLM 오케스트레이터
-│   │   └── main.py         # 서버 진입점
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/               # React + Tailwind 프론트엔드
-│   ├── src/
-│   │   ├── components/     # Thinking Orb, 스킬 뱃지, 결과 뷰어
-│   │   ├── pages/          # 메인 프롬프트 입력 및 대시보드
-│   │   └── App.tsx
-│   └── package.json
-├── docs/                   # 프로젝트 기획 및 설계 문서
-│   └── README.md           # 본 명세서
-└── Gon/                    # 총괄 비서 Gon의 작업 공간
+## 3. 환경변수
+
+| 변수명 | 기본값 | 설명 |
+|---|---|---|
+| `GON_LLM` | `auto` | `stub`으로 설정 시 실제 AI 호출(`agy`) 없이 모의 응답으로 동작 |
+| `GON_LLM_WORKERS` | `4` | 전문가 병렬 작업 동시 호출 스레드 수 |
+| `GON_MAX_EXPERTS` | `8` | 한 요청에 배정할 수 있는 최대 전문가 인원수 |
+| `AGY_PATH` | (자동 감지) | Antigravity CLI(`agy` 또는 `agy.exe`) 실행 파일 절대 경로 직접 지정 |
+
+---
+
+## 4. 실행 및 테스트 방법
+
+### 서비스 구동
+```powershell
+# 전체 통합 실행 (백엔드 8000 + 프런트엔드 5173 동시 구동)
+python Gon/gon.py run
+
+# 서비스 상태 확인
+python Gon/gon.py doctor
+
+# 서비스 종료
+python Gon/gon.py stop
 ```
 
+개별 수동 구동:
+- **백엔드:** `cd backend && python -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
+- **프런트엔드:** `cd frontend && npm run dev`
+
+### 백엔드 테스트 실행
+테스트 환경은 `GON_LLM=stub`로 강제되어 실제 AI 호출을 소모하지 않는다.
+```powershell
+cd backend
+python -m pytest -q
+```
+
+---
+
+## 5. 확인 필요
+
+1. **레거시 라우터 정리 시점:** `backend/app/core/orchestrator.py` 및 `/api/skills`, `/api/route`, `/api/generate`의 삭제 및 정리 일정 결정 필요.
+2. **도구 프로브 라우트 유지 여부:** IDE나 외부 클라이언트의 모델 조회 404를 막기 위해 추가된 `GET /v1/models`의 공식 API 채택 여부.
+3. **전문가 풀 동적 확장:** 현재 `registry/skills.json`(43개)과 `prompt/*.md`(3개)의 46명 구조에서 외부 스킬(`status: external`) 추가 시 자동 반영 정책.
