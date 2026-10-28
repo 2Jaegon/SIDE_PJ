@@ -9,7 +9,8 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /Gon 등록을 �
     python Gon/gon.py install            어느 프로젝트에서든 /Gon 쓰도록 전역 명령 등록
     python Gon/gon.py always on|off      /Gon 없이 모든 세션에 Gon 상시 적용 / 해제
     python Gon/gon.py doctor             설치 상태 점검
-    python Gon/gon.py run                SkillBridge 준비(의존성 설치) + 백엔드·프론트 서버 실행
+    python Gon/gon.py run                서비스 준비(의존성 설치) + 백엔드·프론트 서버 실행
+    python Gon/gon.py stop               실행 중인 서비스 종료
 """
 
 import json
@@ -223,7 +224,7 @@ def cmd_install() -> int:
     return cmd_doctor()
 
 
-# ---------- run (SkillBridge 앱 실행) ----------
+# ---------- run (Gon 서비스 실행) ----------
 
 BACKEND_PORT, FRONTEND_PORT = 8000, 5173
 
@@ -250,7 +251,7 @@ def stop(p: subprocess.Popen) -> None:
 def cmd_run(open_browser: bool = True) -> int:
     be, fe = HOME / "backend", HOME / "frontend"
     if not (be / "app" / "main.py").exists() or not (fe / "package.json").exists():
-        print("이 폴더에 backend/, frontend/ 가 없다. SkillBridge 저장소 루트에서 실행해라.")
+        print("이 폴더에 backend/, frontend/ 가 없다. Gon 저장소 루트에서 실행해라.")
         return 1
 
     # 1) 의존성: 없을 때만 설치
@@ -307,6 +308,23 @@ def cmd_run(open_browser: bool = True) -> int:
             stop(p)
 
 
+def cmd_stop() -> int:
+    """포트를 잡고 있는 서비스 프로세스를 트리째 종료한다."""
+    killed = 0
+    for port in (BACKEND_PORT, FRONTEND_PORT):
+        if os.name == "nt":
+            out = subprocess.run(["netstat", "-ano"], capture_output=True, text=True).stdout
+            pids = {ln.split()[-1] for ln in out.splitlines() if f":{port} " in ln and "LISTENING" in ln}
+            for pid in pids:
+                killed += subprocess.run(["taskkill", "/T", "/F", "/PID", pid], capture_output=True).returncode == 0
+        else:
+            out = subprocess.run(["lsof", "-ti", f":{port}"], capture_output=True, text=True).stdout.split()
+            for pid in out:
+                killed += subprocess.run(["kill", pid], capture_output=True).returncode == 0
+    print(f"[gon] 종료한 프로세스 {killed}개" if killed else "[gon] 실행 중인 서비스가 없다")
+    return 0
+
+
 ALWAYS_FILES = (Path.home() / ".claude" / "CLAUDE.md", Path.home() / ".gemini" / "GEMINI.md")
 BEGIN, END = "<!-- gon:begin -->", "<!-- gon:end -->"
 
@@ -340,6 +358,8 @@ def cmd_doctor() -> int:
     print(f"Gon 홈: {HOME}")
     print(f"스킬 {len(registry)}개 | 저장소 {len(present)}/{len(needed)} 설치 (나머지는 쓸 때 자동으로 받음)")
     print(f"경로 깨짐: {broken or '없음'}")
+    up = port_busy(BACKEND_PORT) and port_busy(FRONTEND_PORT)
+    print(f"서비스: {'실행 중 http://localhost:' + str(FRONTEND_PORT) if up else '꺼짐 (python Gon/gon.py run)'}")
     print("도구: " + ", ".join(f"{t}={'O' if ok else 'X'}" for t, ok in tools.items()))
     for p in (Path.home() / ".claude/commands/Gon.md", Path.home() / ".gemini/commands/Gon.toml"):
         print(f"전역 /Gon: {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
@@ -367,6 +387,8 @@ if __name__ == "__main__":
         sys.exit(cmd_install())
     if cmd == "always" and len(a) == 2 and a[1] in ("on", "off"):
         sys.exit(cmd_always(a[1] == "on"))
+    if cmd == "stop":
+        sys.exit(cmd_stop())
     if cmd == "run":
         sys.exit(cmd_run("--no-open" not in a))
     if cmd == "doctor":

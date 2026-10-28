@@ -583,7 +583,7 @@
    "cluster": "meta",
    "status": "reference",
    "entry": "freellmapi/README.md",
-   "use_for": "무료 LLM 티어 집계 프록시 (SkillBridge 백엔드 후보)",
+   "use_for": "무료 LLM 티어 집계 프록시 (Gon 백엔드 후보)",
    "triggers": [
     "무료 llm",
     "프록시",

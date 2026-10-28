@@ -19,7 +19,7 @@ from app.core import experts, llm
 MAX_EXPERTS = int(os.getenv("SKILLBRIDGE_MAX_EXPERTS", "8"))  # 한 요청에 부를 수 있는 전문가 수(비용 상한)
 WORKERS = int(os.getenv("SKILLBRIDGE_LLM_WORKERS", "4"))
 
-LEAD = {"id": "lead", "name": "총괄", "kind": "lead", "cluster": "lead", "accent": "slate",
+LEAD = {"id": "lead", "name": "Gon", "kind": "lead", "cluster": "lead", "accent": "slate",
         "task": "요청을 읽고 전문가를 편성한 뒤, 결과를 하나로 합칩니다", "use_for": "팀 편성과 결과 종합"}
 
 

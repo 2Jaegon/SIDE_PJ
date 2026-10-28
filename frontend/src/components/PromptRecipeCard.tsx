@@ -67,7 +67,7 @@ function drawCard(query: string, team: DeskData[], tip: string): string | null {
 
   ctx.fillStyle = '#6a6963';
   ctx.font = `400 12px ${font}`;
-  ctx.fillText('SkillBridge · 전국민 AI 평준화', 32, H - 28);
+  ctx.fillText('Gon · 전국민 AI 평준화', 32, H - 28);
 
   return canvas.toDataURL('image/png');
 }
@@ -78,7 +78,7 @@ export const PromptRecipeCard: React.FC<PromptRecipeCardProps> = ({ query, team,
   const handleCopyCardText = async () => {
     const text =
       `[프롬프트 레시피]\n\n요청: "${query}"\n참여 전문가: ${team.map((t) => `${t.character_name}(${t.name})`).join(', ')}\n\n` +
-      `다음엔 이렇게 질문해 보세요:\n${promptCoachTip}\n\nSkillBridge · 전국민 AI 평준화`;
+      `다음엔 이렇게 질문해 보세요:\n${promptCoachTip}\n\nGon · 전국민 AI 평준화`;
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
@@ -92,7 +92,7 @@ export const PromptRecipeCard: React.FC<PromptRecipeCardProps> = ({ query, team,
     const href = drawCard(query, team, promptCoachTip);
     if (!href) return;
     const link = document.createElement('a');
-    link.download = `skillbridge-recipe-${Date.now()}.png`;
+    link.download = `gon-recipe-${Date.now()}.png`;
     link.href = href;
     link.click();
   };
@@ -112,7 +112,7 @@ export const PromptRecipeCard: React.FC<PromptRecipeCardProps> = ({ query, team,
           <div className="text-xs font-semibold text-accent">다음엔 이렇게 질문해 보세요</div>
           <p className="text-sm leading-6 mt-1.5">{promptCoachTip}</p>
         </div>
-        <div className="text-xs text-faint">SkillBridge · 전국민 AI 평준화</div>
+        <div className="text-xs text-faint">Gon · 전국민 AI 평준화</div>
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2">

@@ -33,12 +33,12 @@ export const ExportActionBar: React.FC<ExportActionBarProps> = ({
       `## 참여 전문가\n${teamHeader}\n\n` +
       `---\n\n${content}\n\n---\n\n` +
       `## 다음엔 이렇게 질문해 보세요\n${promptCoachTip}\n\n` +
-      `SkillBridge · 전국민 AI 평준화\n`;
+      `Gon · 전국민 AI 평준화\n`;
 
     const url = URL.createObjectURL(new Blob([md], { type: 'text/markdown;charset=utf-8;' }));
     const link = document.createElement('a');
     link.href = url;
-    link.download = `skillbridge-${query.slice(0, 15).replace(/[^a-zA-Z0-9가-힣]/g, '_')}.md`;
+    link.download = `gon-${query.slice(0, 15).replace(/[^a-zA-Z0-9가-힣]/g, '_')}.md`;
     link.click();
     URL.revokeObjectURL(url);
   };

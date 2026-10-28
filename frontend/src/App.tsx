@@ -242,7 +242,7 @@ export function App() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <Mark />
-            <span className="font-semibold tracking-tight">SkillBridge</span>
+            <span className="font-semibold tracking-tight">Gon</span>
             <span className="hidden sm:inline text-sm text-faint">전국민 AI 평준화</span>
           </div>
           {pool && <span className="text-sm text-sub">전문가 {pool.total}명 대기 중</span>}
@@ -254,7 +254,7 @@ export function App() {
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">AI 전문가 팀에게 일을 맡기세요</h1>
             <p className="text-sm sm:text-base text-sub mt-2">
-              한 줄이면 됩니다. 총괄이 필요한 전문가를 골라 배치하고, 전문가들이 나눠서 일해요. 다음엔 더 잘 질문하는 법도 알려 드려요.
+              한 줄이면 됩니다. Gon이 필요한 전문가를 골라 배치하고, 전문가들이 나눠서 일해요. 다음엔 더 잘 질문하는 법도 알려 드려요.
             </p>
           </div>
 
@@ -325,7 +325,7 @@ export function App() {
           ) : (
             <div className="rounded border border-dashed border-line bg-surface px-5 py-8 space-y-4" aria-busy={booting}>
               <p className="text-sm text-sub">
-                아직 아무도 출근하지 않았어요. 요청을 보내면 <b className="font-semibold text-ink">총괄</b>이 필요한 전문가만 불러 자리를 배치해요.
+                아직 아무도 출근하지 않았어요. 요청을 보내면 <b className="font-semibold text-ink">Gon</b>이 필요한 전문가만 불러 자리를 배치해요.
               </p>
               {pool && (
                 <div className="flex flex-wrap gap-2">
@@ -429,7 +429,7 @@ export function App() {
       </main>
 
       <footer className="border-t border-line py-6 text-center text-xs text-faint">
-        SkillBridge · 전국민 AI 평준화 플랫폼
+        Gon · 전국민 AI 평준화
       </footer>
 
       <AgentTerminalModal
