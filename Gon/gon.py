@@ -167,7 +167,7 @@ def cmd_log(args: list[str]) -> int:
     by = os.environ.get("GON_ACTOR", "ai")
     if len(args) >= 2 and args[0] == "--by":
         by, args = args[1], args[2:]
-    if not args:
+    if not args or args[0] in ("-h", "--help"):
         print('사용법: gon log --by claude|gemini "<무엇을 했고 결과가 어땠는지>"', file=sys.stderr)
         return 2
     files = uncommitted()

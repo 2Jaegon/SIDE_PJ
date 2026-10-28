@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(api_router, prefix="/api")
 
 @app.get("/")
+@app.get("/health")
 async def root():
     return {
         "service": "Gon API",
@@ -29,6 +30,10 @@ async def root():
         "version": "1.0.0",
         "mission": "전국민 AI 평준화"
     }
+
+@app.get("/v1/models")
+async def models():
+    return {"object": "list", "data": [{"id": "gon-gemini", "object": "model", "owned_by": "gon"}]}
 
 if __name__ == "__main__":
     import uvicorn

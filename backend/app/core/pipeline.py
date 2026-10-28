@@ -12,7 +12,7 @@ import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, Iterator, List
+from typing import Any, Dict, Iterator, List, Optional
 
 from app.core import experts, llm
 
@@ -129,14 +129,22 @@ def _stub_text(e: Dict[str, Any]) -> str:
     return f"(시험용) {e['name']}의 전문 분야는 '{e['use_for']}'입니다. AI가 연결되지 않아 실제 작업은 하지 않았어요."
 
 
-def run(query: str) -> Iterator[Dict[str, Any]]:
+def run(query: str, selected_expert_ids: Optional[List[str]] = None) -> Iterator[Dict[str, Any]]:
     pool = experts.load_pool()
     ai = llm.available()
     yield {"type": "start", "mode": "ai" if ai else "stub", "lead": _public(LEAD)}
 
-    # 1) 편성
+    # 1) 편성 (사용자 커스텀 선발 또는 AI 자동 편성)
     plan = None
-    if ai:
+    if selected_expert_ids:
+        valid_ids = [eid for eid in selected_expert_ids if eid in pool]
+        if valid_ids:
+            plan = {
+                "reason": "사용자가 직접 선발한 전문 에이전트 팀입니다",
+                "experts": [{"id": eid, "task": pool[eid]["use_for"]} for eid in valid_ids[:MAX_EXPERTS]]
+            }
+
+    if not plan and ai:
         try:
             plan = _parse_plan(llm.ask(_plan_prompt(query, pool), timeout=90), pool)
         except Exception:
