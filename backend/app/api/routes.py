@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 from app.core.orchestrator import orchestrator
+from app.core.office_orchestrator import office_orchestrator
 from app.core.config import settings
 
 router = APIRouter()
@@ -15,6 +16,18 @@ class RouteRequest(BaseModel):
 class GenerateRequest(BaseModel):
     query: str
     custom_skills: Optional[List[str]] = None
+
+@router.get("/office/layout")
+async def get_office_layout():
+    """Munder Difflin 가상 오피스 레이아웃 및 에이전트 데스크 정보 반환"""
+    return {"desks": office_orchestrator.get_office_layout()}
+
+@router.post("/office/dispatch")
+async def dispatch_office(req: RouteRequest):
+    """가상 오피스 에이전트 팀에게 업무를 배포하고 개별 작업 로그 및 종합 결과물 산출"""
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="요청을 입력해주세요.")
+    return office_orchestrator.dispatch_office_tasks(req.query)
 
 @router.get("/skills")
 async def get_skills():
