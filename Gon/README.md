@@ -7,7 +7,7 @@
 | 경로 | 역할 |
 |---|---|
 | `GON.md` | 프로토콜 (모든 AI가 이 하나를 따름) |
-| `gon.py` | CLI: `catalog` · `pick` · `fetch` · `remember` · `log` · `learn` · `install` · `always` · `run` · `doctor` |
+| `gon.py` | CLI: `catalog` · `pick` · `fetch` · `remember` · `recent` · `log` · `learn` · `install` · `always` · `run` · `doctor` |
 | `registry/skills.json` | 스킬 레지스트리. 용도, 트리거, 시너지, 읽을 파일, 핵심(`core`) 여부 |
 | `memory/` | 장기 메모리(`MEMORY.md`)와 작업 이력(`log.md`) |
 | `prompt/` | 작업용 프롬프트와 최우선 규칙(`outranks everything below.md`) |

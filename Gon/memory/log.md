@@ -1,2 +1,3 @@
 - [2026-10-28] SkillBridge 프론트 리디자인: 밝은 중성 팔레트, 격자형 전문가 목록, 해요체 문구(Gemini 검수), taste 검사 0 WARN
 - [2026-10-28] SkillBridge 멀티 에이전트화: 총괄이 스킬·프롬프트 풀 47개에서 전문가 편성, 병렬 작업 후 종합. ECC 핵심 스킬(항상/프로젝트)을 gon route에 자동 부착
+- [2026-10-28 17:21] [claude] 작업 이력 공유 체계 추가: gon recent(시작 전 이력·커밋·미커밋 변경 보기), gon log --by(끝날 때 기록, 미커밋 파일 자동 첨부), GON.md 시작·종료 절차에 반영. 시험은 recent 출력 확인까지만 했고 Gemini가 실제로 따르는지는 미확인 | 미커밋 17개: Gon/GON.md, Gon/README.md, Gon/gon.py, backend/app/api/routes.py, backend/app/core/orchestrator.py, backend/app/core/pipeline.py, backend/app/main.py, Gon/roster-backups/roster-2026-10-28T08-11-24-333Z-1-write.json 외

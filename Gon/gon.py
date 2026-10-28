@@ -5,7 +5,8 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /Gon 등록을 �
     python Gon/gon.py pick <id> [id…]    고른 스킬의 경로 출력 (없는 저장소는 자동으로 받고, 항상 적용 핵심을 덧붙임)
     python Gon/gon.py fetch <id|all>     스킬 저장소 받기 (shallow)
     python Gon/gon.py remember "<사실>"  장기 메모리에 한 줄 추가
-    python Gon/gon.py log "<한 줄>"      작업 이력에 한 줄 추가
+    python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·아직 커밋 안 된 변경을 한 번에 본다
+    python Gon/gon.py log --by claude|gemini "<한 줄>"   작업 끝: 이력에 한 줄 추가 (미커밋 변경 파일 자동 첨부)
     python Gon/gon.py learn <id> "<용도>" "<트리거,…>"   로컬 스킬 생성·등록
     python Gon/gon.py install            어느 프로젝트에서든 /Gon 쓰도록 전역 명령 등록
     python Gon/gon.py always on|off      /Gon 없이 모든 세션에 Gon 상시 적용 / 해제
@@ -141,6 +142,61 @@ def append(file: str, line: str) -> int:
     MEMORY.mkdir(exist_ok=True)
     with (MEMORY / file).open("a", encoding="utf-8") as f:
         f.write(f"- [{date.today()}] {line.strip()}\n")
+    return 0
+
+
+# ---------- 작업 이력 (Claude Code · Antigravity Gemini 공용) ----------
+
+def git_lines(*args: str) -> list[str]:
+    r = subprocess.run(["git", "-C", str(HOME), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return [l for l in r.stdout.splitlines() if l.strip()]
+
+
+def uncommitted() -> list[str]:
+    """아직 커밋되지 않은 변경 파일. 이력 파일 자체는 뺀다."""
+    out = []
+    for l in git_lines("status", "--short", "--untracked-files=all"):
+        path = l[3:].strip().strip('"')
+        if not path.startswith("Gon/memory/"):
+            out.append(path)
+    return out
+
+
+def cmd_log(args: list[str]) -> int:
+    """gon log [--by claude|gemini] "<한 일, 결과, 다음 사람이 알아야 할 것>" — 커밋 안 된 변경 파일은 자동으로 덧붙인다."""
+    by = os.environ.get("GON_ACTOR", "ai")
+    if len(args) >= 2 and args[0] == "--by":
+        by, args = args[1], args[2:]
+    if not args:
+        print('사용법: gon log --by claude|gemini "<무엇을 했고 결과가 어땠는지>"', file=sys.stderr)
+        return 2
+    files = uncommitted()
+    tail = f" | 미커밋 {len(files)}개: {', '.join(files[:8])}{' 외' if len(files) > 8 else ''}" if files else ""
+    MEMORY.mkdir(exist_ok=True)
+    with (MEMORY / "log.md").open("a", encoding="utf-8") as f:
+        f.write(f"- [{date.today()} {time.strftime('%H:%M')}] [{by}] {' '.join(args).strip()}{tail}\n")
+    return 0
+
+
+def cmd_recent(n: int = 10) -> int:
+    """작업 시작 전에 보는 것: 최근 이력, 최근 커밋, 아직 커밋 안 된 변경(최신순)."""
+    log = MEMORY / "log.md"
+    print("## 최근 작업 이력")
+    lines = log.read_text(encoding="utf-8").splitlines()[-n:] if log.exists() else []
+    print("\n".join(lines) if lines else "(없음)")
+    print("\n## 최근 커밋")
+    print("\n".join(git_lines("log", "-5", "--format=%h %ad %s", "--date=format:%m-%d %H:%M")) or "(없음)")
+    print("\n## 아직 커밋되지 않은 변경 (최근 수정순) — 누가 했는지 모르면 git diff로 내용을 먼저 본다")
+    now = time.time()
+    rows = []
+    for path in uncommitted():
+        p = HOME / path
+        rows.append((p.stat().st_mtime if p.exists() else 0, path))
+    for mtime, path in sorted(rows, reverse=True):
+        age = f"{int((now - mtime) // 60)}분 전" if mtime else "삭제됨"
+        print(f"  {path}  ({age})")
+    if not rows:
+        print("  (없음)")
     return 0
 
 
@@ -351,8 +407,12 @@ if __name__ == "__main__":
     if cmd == "fetch" and len(a) > 1:
         names = list(json.loads(MANIFEST.read_text(encoding="utf-8"))) if a[1] == "all" else a[1:]
         sys.exit(1 if fetch(names) else 0)
-    if cmd in ("remember", "log") and len(a) > 1:
-        sys.exit(append("MEMORY.md" if cmd == "remember" else "log.md", " ".join(a[1:])))
+    if cmd == "remember" and len(a) > 1:
+        sys.exit(append("MEMORY.md", " ".join(a[1:])))
+    if cmd == "log":
+        sys.exit(cmd_log(a[1:]))
+    if cmd == "recent":
+        sys.exit(cmd_recent(int(a[1]) if len(a) > 1 and a[1].isdigit() else 10))
     if cmd == "learn" and len(a) == 4:
         sys.exit(cmd_learn(*a[1:]))
     if cmd == "install":
