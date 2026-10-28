@@ -10,7 +10,29 @@ class MunderDifflinOrchestrator:
 
     def __init__(self):
         self.templates: Dict[str, Dict[str, Any]] = {}
+        # 현재 오피스에 기본 출근한 5인 팀 (Michael + 기본 4인)
+        self.current_team_ids: List[str] = [
+            "frontend-developer",
+            "product-designer",
+            "backend-and-full-stack-engineer",
+            "qa-and-test-engineer",
+            "growth-marketer"
+        ]
         self.load_all_templates()
+
+    def categorize_agent(self, agent_id: str, capabilities: List[str]) -> str:
+        aid = agent_id.lower()
+        caps = " ".join(capabilities).lower()
+        if any(k in aid or k in caps for k in ["engineer", "developer", "devops", "security", "ml", "ai"]):
+            return "Engineering"
+        elif any(k in aid or k in caps for k in ["designer", "video", "motion", "brand"]):
+            return "Design & Creative"
+        elif any(k in aid or k in caps for k in ["marketing", "marketer", "seo", "social", "sales", "growth"]):
+            return "Marketing & Sales"
+        elif any(k in aid or k in caps for k in ["product", "project", "researcher", "analyst"]):
+            return "Product & Strategy"
+        else:
+            return "Operations & Legal"
 
     def load_all_templates(self):
         if not TEMPLATES_DIR.exists():
@@ -21,6 +43,9 @@ class MunderDifflinOrchestrator:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     agent_id = file_path.stem.replace(".agent", "")
+                    caps = data.get("configs", {}).get("capabilities", [])
+                    category = self.categorize_agent(agent_id, caps)
+                    
                     self.templates[agent_id] = {
                         "id": agent_id,
                         "name": data.get("name", agent_id),
@@ -29,44 +54,35 @@ class MunderDifflinOrchestrator:
                         "accent": data.get("configs", {}).get("accent", "slate"),
                         "role": data.get("configs", {}).get("role", ""),
                         "goal": data.get("configs", {}).get("goal", ""),
-                        "capabilities": data.get("configs", {}).get("capabilities", []),
+                        "capabilities": caps,
+                        "category": category,
                         "mcp_servers": data.get("mcpServers", {}).get("catalog", []),
                         "skills": data.get("skills", {}).get("catalog", [])
                     }
             except Exception as e:
                 print(f"Error loading {file_path}: {e}")
 
-    def get_all_agents(self) -> List[Dict[str, Any]]:
+    def get_all_templates(self) -> List[Dict[str, Any]]:
+        """36개 전체 템플릿 목록 반환"""
         return list(self.templates.values())
 
+    def set_active_team(self, agent_ids: List[str]) -> List[Dict[str, Any]]:
+        """사용자가 커스텀 선택한 에이전트 목록으로 오피스 데스크 팀 교체 (최대 5명)"""
+        valid_ids = [aid for aid in agent_ids if aid in self.templates]
+        if valid_ids:
+            self.current_team_ids = valid_ids[:5]
+        return self.get_active_office_team()
+
     def get_active_office_team(self, query: str = "") -> List[Dict[str, Any]]:
-        """질문에 맞춰 2D 오피스에 배치할 핵심 5인 팀 선별 (기본: Michael + 핵심 4인)"""
-        # 기본 핵심 오피스 라인업
-        primary_ids = [
-            "frontend-developer",       # Jim (Frontend Developer)
-            "product-designer",          # Pam (Product Designer)
-            "backend-and-full-stack-engineer", # Dwight (Backend Engineer)
-            "qa-and-test-engineer",      # Angela (QA Engineer)
-            "growth-marketer"            # Ryan (Growth Marketer)
-        ]
+        """현재 출근 중인 5인 에이전트 데스크 정보 반환"""
+        selected_ids = list(self.current_team_ids)
 
-        query_lower = query.lower()
-        # 질문 키워드에 따라 관련 템플릿 우선 매칭
-        matched_ids = []
-        for aid, tmpl in self.templates.items():
-            for cap in tmpl["capabilities"]:
-                if cap.lower() in query_lower or tmpl["name"].lower() in query_lower:
-                    matched_ids.append(aid)
-                    break
-
-        selected_ids = list(dict.fromkeys(matched_ids + primary_ids))[:5]
-
-        # 2D 오피스 좌표 계산 (중앙 Michael + 하단 4인 데스크)
+        # 2D 오피스 좌표 계산 (하단 4인 데스크 + 상단 Michael/팀장 데스크)
         coords = [
-            {"x": 20, "y": 60},
-            {"x": 40, "y": 60},
-            {"x": 60, "y": 60},
-            {"x": 80, "y": 60},
+            {"x": 20, "y": 62},
+            {"x": 40, "y": 62},
+            {"x": 60, "y": 62},
+            {"x": 80, "y": 62},
             {"x": 50, "y": 25}
         ]
 
@@ -78,7 +94,11 @@ class MunderDifflinOrchestrator:
                 "character": "worker",
                 "accent": "slate",
                 "role": "Agent Worker",
-                "goal": "Complete the assigned mission."
+                "goal": "Complete the assigned mission.",
+                "capabilities": ["Generalist"],
+                "category": "General",
+                "skills": [],
+                "mcp_servers": []
             })
             
             coord = coords[idx] if idx < len(coords) else {"x": 50, "y": 50}
@@ -89,7 +109,9 @@ class MunderDifflinOrchestrator:
                 "role_korean": tmpl["name"],
                 "badge_label": tmpl["capabilities"][0] if tmpl.get("capabilities") else "전문가",
                 "accent": tmpl["accent"],
+                "category": tmpl.get("category", "General"),
                 "desk_coord": coord,
+                "desk_index": idx,
                 "description": tmpl.get("description", ""),
                 "role_prompt": tmpl.get("role", ""),
                 "goal": tmpl.get("goal", ""),
@@ -100,7 +122,7 @@ class MunderDifflinOrchestrator:
         return team
 
     def dispatch_tasks(self, query: str) -> Dict[str, Any]:
-        """실제 Munder Difflin 공식 에이전트들의 role & goal 기반 작업 실행 및 종합"""
+        """현재 출근한 커스텀 에이전트 팀원들의 role & goal 기반 합동 작업 산출"""
         team = self.get_active_office_team(query)
         agent_logs = {}
 
@@ -108,38 +130,37 @@ class MunderDifflinOrchestrator:
             agent_logs[agent["id"]] = {
                 "name": agent["name"],
                 "character": agent["character_name"],
+                "role": agent["role_korean"],
                 "status": "completed",
                 "log": (
-                    f"[{agent['character_name']} : {agent['name']}]\n"
+                    f"[{agent['character_name']} : {agent['name']} ({agent['category']})]\n"
                     f"• 역할: {agent['role_prompt']}\n"
                     f"• 목표: {agent['goal']}\n"
-                    f"• 산출물: '{query}' 관련 {agent['badge_label']} 영역 세부 작성 및 검증 완료."
+                    f"• 수행 내역: '{query}'에 대해 {agent['badge_label']} 관점의 전문 실행안 분석 및 도출 완료."
                 )
             }
 
-        # 전국민 AI 평준화 통합 보고서 조립
+        # 출근한 팀원들의 직무에 맞춘 유기적 종합 보고서 조립
+        sections_md = []
+        for idx, agent in enumerate(team, 1):
+            sections_md.append(
+                f"{idx}. [{agent['character_name']} : {agent['name']}] 전문 보고서\n"
+                f"- 직무 영역: {agent['category']} · {agent['badge_label']}\n"
+                f"- 실행 제안: 사용자의 요청 과제에 대해 '{agent['goal']}' 기준을 충족하는 맞춤형 실행 전략 수립\n"
+                f"- 산출 디테일: {agent['description']}"
+            )
+
         final_report = (
-            f"🏢 [Munder Difflin AI Office] 공식 템플릿 합동 작업 보고서\n\n"
+            f"🏢 [Munder Difflin AI Office] 커스텀 팀원 합동 작업 보고서\n\n"
             f"**의뢰 과제:** {query}\n"
-            f"**출근한 전문 에이전트:** {', '.join([f'{a['character_name']}({a['name']})' for a in team])}\n\n"
+            f"**출근한 전문 에이전트 팀:** {', '.join([f'{a['character_name']}({a['name']})' for a in team])}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"1. [기획 & 사용자 흐름] (Product Designer & Marketing)\n"
-            f"- 타깃 고객의 핵심 결핍 정의 및 제품 가치 제안(Value Proposition) 수립\n"
-            f"- 첫 사용자의 이탈을 막는 3단계 직관적 온보딩 플로우 설계\n\n"
-            f"2. [인터페이스 & 미감] (Frontend Developer - Jim)\n"
-            f"- 촌스러운 네온 컬러 배제, 절제된 타이포그래피와 고대비 텍스트 계층\n"
-            f"- 모바일/태블릿 반응형 뷰포트 및 키보드 웹 접근성(A11y) 기준 통과\n\n"
-            f"3. [엔지니어링 코어] (Backend & Full-Stack - Dwight)\n"
-            f"- 복잡한 의존성 없는 단일 책임 원칙(SRP) 기반의 초고속 백엔드 API 설계\n"
-            f"- Context7 및 MCP 서버 연동을 통한 최적화된 토큰 관리\n\n"
-            f"4. [품질 및 무결성 감사] (QA & Test Engineer - Angela)\n"
-            f"- 잠재적 에러 상태, 빈 상태(Empty State), 네트워크 지연 예외 처리 검증 완료."
+            + "\n\n".join(sections_md)
         )
 
         coach_tip = (
-            f"💡 [Michael's AI 코칭] 실제 실리콘밸리 팀처럼 일하기 위해서는 "
-            f"'{query}' 요청 시 '원하는 핵심 기능 3가지'와 '레퍼런스 사이트'를 함께 주시면 "
-            f"에이전트들이 100% 실사 화면을 바로 뽑아냅니다!"
+            f"💡 [Michael's AI 코칭] 현재 팀에 출근한 [{team[0]['name']}], [{team[1]['name']}] 등에게 "
+            f"더 날카로운 결과를 얻으시려면 '목표 타깃 고객'과 '선호하는 구체적 예시'를 프롬프트에 덧붙여보세요!"
         )
 
         return {

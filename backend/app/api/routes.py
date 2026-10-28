@@ -13,21 +13,37 @@ router = APIRouter()
 class RouteRequest(BaseModel):
     query: str
 
+class SetTeamRequest(BaseModel):
+    agent_ids: List[str]
+
 class GenerateRequest(BaseModel):
     query: str
     custom_skills: Optional[List[str]] = None
 
+@router.get("/office/all-templates")
+async def get_all_templates():
+    """36개 전체 공식 에이전트 템플릿 목록 반환"""
+    return {"templates": office_orchestrator.get_all_templates()}
+
+@router.post("/office/set-team")
+async def set_active_team(req: SetTeamRequest):
+    """오피스 데스크에 출근시킬 커스텀 에이전트 팀원 갱신"""
+    if not req.agent_ids:
+        raise HTTPException(status_code=400, detail="에이전트를 1명 이상 선택해주세요.")
+    updated_team = office_orchestrator.set_active_team(req.agent_ids)
+    return {"status": "ok", "team": updated_team}
+
 @router.get("/office/layout")
 async def get_office_layout():
-    """Munder Difflin 가상 오피스 레이아웃 및 에이전트 데스크 정보 반환"""
-    return {"desks": office_orchestrator.get_office_layout()}
+    """Munder Difflin 가상 오피스 레이아웃 및 현재 출근 중인 에이전트 데스크 반환"""
+    return {"desks": office_orchestrator.get_active_office_team()}
 
 @router.post("/office/dispatch")
 async def dispatch_office(req: RouteRequest):
-    """가상 오피스 에이전트 팀에게 업무를 배포하고 개별 작업 로그 및 종합 결과물 산출"""
+    """현재 출근한 가상 오피스 에이전트 팀에게 업무를 배포하고 개별 작업 로그 및 종합 결과물 산출"""
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="요청을 입력해주세요.")
-    return office_orchestrator.dispatch_office_tasks(req.query)
+    return office_orchestrator.dispatch_tasks(req.query)
 
 @router.get("/skills")
 async def get_skills():

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Monitor, Sparkles, CheckCircle, Wrench } from 'lucide-react';
+import { Monitor, Sparkles, CheckCircle, Wrench, RefreshCw } from 'lucide-react';
 
 export interface DeskData {
   id: string;
@@ -9,6 +9,7 @@ export interface DeskData {
   badge_label: string;
   accent: string;
   desk_coord: { x: number; y: number };
+  desk_index?: number;
   description: string;
   skills?: string[];
   mcp_servers?: string[];
@@ -20,6 +21,7 @@ interface OfficeFloorProps {
   workingAgentIds: string[];
   selectedAgentId: string | null;
   onSelectAgent: (id: string) => void;
+  onOpenRosterSlot?: (slotIndex: number) => void;
 }
 
 export const OfficeFloor: React.FC<OfficeFloorProps> = ({
@@ -28,6 +30,7 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
   workingAgentIds,
   selectedAgentId,
   onSelectAgent,
+  onOpenRosterSlot,
 }) => {
   const getAccentGradient = (accent: string) => {
     switch (accent) {
@@ -80,7 +83,7 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
       </div>
 
       {/* 4. 에이전트 데스크들 배치 */}
-      {desks.map((desk) => {
+      {desks.map((desk, idx) => {
         const isActive = activeAgentIds.includes(desk.id);
         const isWorking = workingAgentIds.includes(desk.id);
         const isSelected = selectedAgentId === desk.id;
@@ -88,12 +91,11 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
         return (
           <div
             key={desk.id}
-            onClick={() => onSelectAgent(desk.id)}
             style={{
               left: `${desk.desk_coord.x}%`,
               top: `${desk.desk_coord.y}%`,
             }}
-            className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group transition-all duration-300 z-10"
+            className="absolute -translate-x-1/2 -translate-y-1/2 group transition-all duration-300 z-10"
           >
             {/* 상태 뱃지 말풍선 */}
             {isWorking && (
@@ -111,24 +113,38 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
             )}
 
             {/* 책상 및 모니터 바디 */}
-            <div className={`relative w-32 h-24 rounded-2xl p-2.5 flex flex-col justify-between transition-all duration-300 border ${
-              isSelected 
-                ? 'bg-indigo-950/90 border-indigo-400 shadow-2xl shadow-indigo-500/30 scale-105' 
-                : isActive 
-                ? 'bg-slate-900/95 border-slate-700 hover:border-slate-500 shadow-lg' 
-                : 'bg-slate-950/70 border-slate-900 opacity-60 hover:opacity-100'
-            }`}>
-              {/* 상단 모니터 & 캐릭터 이름 */}
+            <div 
+              onClick={() => onSelectAgent(desk.id)}
+              className={`relative w-32 h-24 rounded-2xl p-2.5 flex flex-col justify-between transition-all duration-300 border cursor-pointer ${
+                isSelected 
+                  ? 'bg-indigo-950/90 border-indigo-400 shadow-2xl shadow-indigo-500/30 scale-105' 
+                  : isActive 
+                  ? 'bg-slate-900/95 border-slate-700 hover:border-slate-500 shadow-lg' 
+                  : 'bg-slate-950/70 border-slate-900 opacity-70 hover:opacity-100'
+              }`}
+            >
+              {/* 상단 모니터 & 캐릭터 이름 & 교체 버튼 */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Monitor className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-400' : 'text-slate-600'}`} />
-                  <span className="text-xs font-bold text-slate-100 truncate max-w-[70px]">
+                  <span className="text-xs font-bold text-slate-100 truncate max-w-[65px]">
                     {desk.character_name}
                   </span>
                 </div>
-                <div className={`w-2 h-2 rounded-full ${
-                  isWorking ? 'bg-amber-400 animate-ping' : isActive ? 'bg-emerald-400' : 'bg-slate-700'
-                }`} />
+                
+                {/* 빠른 자리 교체 버튼 */}
+                {onOpenRosterSlot && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenRosterSlot(idx);
+                    }}
+                    title="이 데스크의 에이전트 교체"
+                    className="p-1 rounded-md bg-slate-800/80 hover:bg-indigo-600 text-slate-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                  </button>
+                )}
               </div>
 
               {/* 하단 캐릭터 아바타 및 역할 */}
@@ -150,7 +166,7 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
 
             {/* 호버 힌트 */}
             <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-[10px] text-slate-300 bg-slate-900/95 px-2.5 py-1 rounded-lg border border-slate-700 whitespace-nowrap shadow-lg z-20">
-              클릭하여 {desk.character_name}의 공식 템플릿 & 터미널 열람
+              클릭하여 {desk.character_name} 터미널 열람
             </div>
           </div>
         );
