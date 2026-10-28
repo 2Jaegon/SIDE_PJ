@@ -2,24 +2,85 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 색은 여기서 직접 적는다. @apply로 커스텀 토큰을 쓰면 개발 서버가 설정을 새로 읽지 못했을 때 CSS 전체가 500으로 죽는다. */
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
-    font-family: 'Pretendard', sans-serif;
+    background: #f5f5f3;
+    color: #1a1a18;
+    font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'tnum' 1;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+  ::selection {
+    background: #cfe6e0;
+  }
+  :focus-visible {
+    outline: 2px solid #0b6b5c;
+    outline-offset: 2px;
+  }
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
   }
 }
 
-@keyframes pulse-slow {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-  }
+/* 작업 중 표시: 점 하나만 천천히 숨 쉰다 */
+@keyframes breathe {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+.working-dot {
+  animation: breathe 1.6s ease-in-out infinite;
 }
 
-.animate-pulse-slow {
-  animation: pulse-slow 3s infinite ease-in-out;
+/* 일하는 에이전트: 모니터 줄이 타이핑되듯 늘었다 줄고, 몸이 살짝 움직이며, 말풍선 점이 차례로 깜빡인다 */
+@keyframes type-line {
+  0%, 100% { transform: scaleX(0.2); }
+  55% { transform: scaleX(1); }
+}
+@keyframes fig-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(1.5px); }
+}
+@keyframes dot-pulse {
+  0%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+}
+.type-line {
+  transform-box: fill-box;
+  transform-origin: left center;
+  animation: type-line 1.4s ease-in-out infinite;
+}
+.fig-bob {
+  animation: fig-bob 0.7s ease-in-out infinite;
+}
+.dot-pulse {
+  animation: dot-pulse 1s ease-in-out infinite;
 }
 
+/* 패널·오버레이가 열릴 때 (피드백 모션, 200ms ease-out) */
+@keyframes rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes slide-in {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.anim-rise { animation: rise 200ms cubic-bezier(0.22, 1, 0.36, 1); }
+.anim-slide { animation: slide-in 220ms cubic-bezier(0.22, 1, 0.36, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

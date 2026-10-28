@@ -6,18 +6,26 @@ export default {
   ],
   theme: {
     extend: {
+      // 밝은 중성 바탕 + 초록 계열 포인트 한 가지. 색은 데이터·상태·주 행동에만 쓴다.
       colors: {
-        background: '#090a0f',
-        surface: '#12141c',
-        'surface-border': '#222634',
-        primary: '#6366f1',
-        accent: '#8b5cf6',
+        ground: '#f5f5f3',
+        surface: '#ffffff',
+        sunken: '#ececea',
+        line: '#e0e0dc',
+        ink: '#1a1a18',
+        sub: '#53524d',
+        faint: '#6a6963',
+        accent: { DEFAULT: '#0b6b5c', hover: '#095649', soft: '#e1f0ec' },
+        danger: { DEFAULT: '#a33a2a', soft: '#f9e8e4' },
       },
       fontFamily: {
-        sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
-      }
+        sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+      },
+      borderRadius: { DEFAULT: '8px' },
+      fontSize: { xs: ['0.8125rem', '1.25rem'] },
+      transitionTimingFunction: { out: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     },
   },
   plugins: [],
 }
-

@@ -1,11 +1,13 @@
 import os
+import json
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 from app.core.orchestrator import orchestrator
-from app.core.office_orchestrator import office_orchestrator
+from app.core import pipeline
 from app.core.config import settings
 
 router = APIRouter()
@@ -13,37 +15,29 @@ router = APIRouter()
 class RouteRequest(BaseModel):
     query: str
 
-class SetTeamRequest(BaseModel):
-    agent_ids: List[str]
-
 class GenerateRequest(BaseModel):
     query: str
     custom_skills: Optional[List[str]] = None
 
-@router.get("/office/all-templates")
-async def get_all_templates():
-    """36개 전체 공식 에이전트 템플릿 목록 반환"""
-    return {"templates": office_orchestrator.get_all_templates()}
+@router.get("/office/pool")
+def office_pool():
+    """전문가 풀(스킬 + 프롬프트) 요약: 전체 수, 분야별 수, AI 연결 여부"""
+    return pipeline.pool_summary()
 
-@router.post("/office/set-team")
-async def set_active_team(req: SetTeamRequest):
-    """오피스 데스크에 출근시킬 커스텀 에이전트 팀원 갱신"""
-    if not req.agent_ids:
-        raise HTTPException(status_code=400, detail="에이전트를 1명 이상 선택해주세요.")
-    updated_team = office_orchestrator.set_active_team(req.agent_ids)
-    return {"status": "ok", "team": updated_team}
-
-@router.get("/office/layout")
-async def get_office_layout():
-    """Munder Difflin 가상 오피스 레이아웃 및 현재 출근 중인 에이전트 데스크 반환"""
-    return {"desks": office_orchestrator.get_active_office_team()}
-
-@router.post("/office/dispatch")
-async def dispatch_office(req: RouteRequest):
-    """현재 출근한 가상 오피스 에이전트 팀에게 업무를 배포하고 개별 작업 로그 및 종합 결과물 산출"""
+@router.post("/office/dispatch-stream")
+def dispatch_office_stream(req: RouteRequest):
+    """전문가별 작업을 실제로 실행하며, 끝나는 대로 한 줄씩(NDJSON) 흘려보낸다."""
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="요청을 입력해주세요.")
-    return office_orchestrator.dispatch_tasks(req.query)
+
+    def lines():
+        try:
+            for event in pipeline.run(req.query):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": f"서버 오류: {e}"}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(lines(), media_type="application/x-ndjson")
 
 @router.get("/skills")
 async def get_skills():
