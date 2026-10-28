@@ -7,7 +7,6 @@ import { PromptRecipeCard } from './components/PromptRecipeCard';
 import { ActivityFeed, FeedItem } from './components/ActivityFeed';
 import { RosterDrawer, ExpertItem } from './components/RosterDrawer';
 import { Avatar } from './components/Avatar';
-import { playKeyClick, playDoneChime } from './utils/sound';
 
 interface Expert {
   id: string;
@@ -156,7 +155,7 @@ export function App() {
           setDesks(roster);
           setWorkingAgentIds([lead.id]);
           setActiveAgentIds([lead.id]);
-          say(lead, '요청을 분석하고 최적의 전문가를 가상 오피스에 배치하고 있어요', 'start');
+          say(lead, '요청을 분석해서 필요한 전문가를 고르고 있어요', 'start');
           return null;
         }
         case 'plan': {
@@ -166,12 +165,11 @@ export function App() {
           setDesks(roster);
           setWorkingAgentIds(team.map((t) => t.id));
           setActiveAgentIds(team.map((t) => t.id));
-          say(lead, `${team.length}명을 오피스 데스크에 배치했습니다${ev.reason ? `. (${ev.reason})` : ''}`, 'plan');
+          say(lead, `${team.length}명을 책상에 앉혔어요${ev.reason ? `. ${ev.reason}` : ''}`, 'plan');
           team.forEach((t) => say(t, `맡은 일: ${t.name}`, 'task'));
           return null;
         }
         case 'agent': {
-          playKeyClick(); // 작업 완료 시 타건음
           const d = find(ev.id);
           setWorkingAgentIds((w) => w.filter((x) => x !== ev.id));
           setTexts((t) => ({ ...t, [ev.id]: ev.text }));
@@ -186,11 +184,10 @@ export function App() {
           const lead = roster[0];
           setWorkingAgentIds([lead.id]);
           setActiveAgentIds((a) => [...a, lead.id]);
-          say(lead, '전문가들의 개별 산출물을 검토하여 하나의 종합 보고서로 완성하고 있어요', 'synth');
+          say(lead, '전문가들의 결과를 하나로 합치고 있어요', 'synth');
           return null;
         }
         case 'final':
-          playDoneChime(); // 종합 완료 차임벨
           return ev.data;
       }
     };
@@ -265,124 +262,100 @@ export function App() {
   const selectedAgent = desks.find((d) => d.id === selectedAgentId) || null;
   const resultTeam = result ? result.experts.map((x, i) => toDesk(x, i + 1)) : [];
 
-  return (
-    <div className="min-h-screen flex flex-col bg-[#fafaf9] text-slate-900 font-sans">
-      {/* 1. 상단 글로벌 네비게이션 HUD */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Mark />
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold tracking-tight text-slate-900">Gon Studio</span>
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium">
-                AI Virtual Office
-              </span>
-            </div>
-          </div>
+  const planning = isLoading && desks.length <= 1;
 
-          <div className="flex items-center gap-2.5">
+  return (
+    <div className="min-h-screen flex flex-col bg-ground text-ink font-sans">
+      <header className="sticky top-0 z-40 bg-surface border-b border-line">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Mark />
+            <span className="font-bold tracking-tight">Gon</span>
+            <span className="hidden sm:inline text-sm text-faint">전국민 AI 평준화</span>
+          </div>
+          <div className="flex items-center gap-3">
+            {pool?.mode === 'stub' && <span className="hidden sm:inline text-sm text-faint">AI 미연결 · 시험용 결과</span>}
             <button
               type="button"
               onClick={() => {
                 setTargetSlotIndex(null);
                 setIsRosterOpen(true);
               }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-sm transition-all"
+              className="h-9 px-3 rounded border border-line bg-surface text-sm font-medium text-ink hover:border-faint inline-flex items-center gap-1.5 transition-colors duration-200 ease-out"
             >
-              <Users className="w-3.5 h-3.5 text-emerald-600" />
-              <span>전문가 인재풀 (46명)</span>
+              <Users className="w-4 h-4 text-accent" aria-hidden />
+              <span className="sm:hidden">직접 고르기</span>
+              <span className="hidden sm:inline">{pool ? `전문가 직접 고르기 (${pool.total}명)` : '전문가 직접 고르기'}</span>
             </button>
-
-            {pool && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-500 font-medium px-2.5 py-1 rounded-full bg-slate-100">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                <span>{pool.mode === 'ai' ? 'Gemini AI 연동' : '로컬 모드'}</span>
-              </span>
-            )}
           </div>
         </div>
       </header>
 
-      {/* 2. 메인 가상 오피스 스테이지 */}
-      <main className="max-w-6xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 flex-1 space-y-8">
-        {/* 헤드라인 및 커맨드 입력창 */}
-        <section className="space-y-4">
+      <main className="max-w-5xl mx-auto w-full px-4 sm:px-6 py-8 sm:py-10 flex-1 space-y-8">
+        <section className="space-y-5">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-950">
-              가상 오피스 멀티에이전트 스튜디오
-            </h1>
-            <p className="text-sm text-slate-600 mt-1.5">
-              원하는 업무를 한 줄로 지시하면, Gon이 46명의 스킬 전문가를 소집해 각 데스크에서 분담 실행합니다.
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">AI 전문가 팀에게 일을 맡기세요</h1>
+            <p className="text-base text-sub mt-2 max-w-2xl">
+              한 줄이면 됩니다. Gon이 필요한 전문가만 불러 책상에 앉히고, 전문가들이 나눠서 일해요. 다음엔 더 잘 질문하는 법도 알려 드려요.
             </p>
           </div>
 
-          <form onSubmit={handleDispatch} className="space-y-2.5">
+          <form onSubmit={handleDispatch} className="space-y-3">
             <div className="flex flex-col sm:flex-row gap-2">
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="예: 동네 감성 카페 오픈 이벤트 인스타 홍보글 써줘"
-                  className="w-full h-12 bg-white border border-slate-300 rounded-xl px-4 text-base placeholder:text-slate-400 focus:outline-none focus:border-emerald-600 focus:ring-4 focus:ring-emerald-500/10 shadow-sm transition-all"
-                />
-              </div>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label="요청"
+                placeholder="예: 카페 오픈 이벤트 인스타 홍보글"
+                className="flex-1 h-12 rounded border border-line bg-surface px-4 text-base text-ink placeholder:text-faint focus:outline-none focus:border-accent transition-colors duration-200 ease-out"
+              />
               <button
                 type="submit"
                 disabled={isLoading || !query.trim()}
-                className="h-12 px-6 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold inline-flex items-center justify-center gap-2 shadow-sm transition-all duration-200 hover:scale-[1.01]"
+                className="h-12 px-6 rounded bg-accent text-white font-semibold inline-flex items-center justify-center gap-2 hover:bg-accent-hover disabled:bg-sunken disabled:text-faint transition-colors duration-200 ease-out"
               >
                 <ArrowUp className="w-4 h-4" aria-hidden />
-                <span>{isLoading ? '오피스 가동 중' : '업무 지시하기'}</span>
+                {isLoading ? '일하는 중' : '요청 보내기'}
               </button>
             </div>
 
-            {/* 수동 출근 팀이 지정되어 있는 경우 알림 태그 */}
             {customTeam.length > 0 && (
-              <div className="flex items-center gap-2 pt-1 text-xs text-slate-600">
-                <span className="font-semibold text-emerald-800 flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  지정 출근 팀 ({customTeam.length}명):
+              <div className="flex flex-wrap items-center gap-2 text-sm text-sub">
+                <span className="inline-flex items-center gap-1 font-medium text-ink">
+                  <Sparkles className="w-4 h-4 text-accent" aria-hidden />
+                  직접 고른 팀 {customTeam.length}명
                 </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {customTeam.map((c) => (
-                    <span
-                      key={c.id}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 font-medium text-[11px]"
+                {customTeam.map((c) => (
+                  <span key={c.id} className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-full border border-line bg-surface text-ink">
+                    {c.name}
+                    <button
+                      type="button"
+                      onClick={() => setCustomTeam((prev) => prev.filter((x) => x.id !== c.id))}
+                      aria-label={`${c.name} 빼기`}
+                      className="w-5 h-5 rounded-full inline-flex items-center justify-center text-faint hover:text-danger"
                     >
-                      {c.name}
-                      <button
-                        type="button"
-                        onClick={() => setCustomTeam((prev) => prev.filter((x) => x.id !== c.id))}
-                        className="hover:text-rose-600"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </span>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setCustomTeam([])}
-                    className="text-[11px] text-slate-400 hover:text-slate-600 underline ml-1"
-                  >
-                    AI 자동 소집으로 전환
-                  </button>
-                </div>
+                      <X className="w-3.5 h-3.5" aria-hidden />
+                    </button>
+                  </span>
+                ))}
+                <button type="button" onClick={() => setCustomTeam([])} className="text-sm text-faint hover:text-ink underline underline-offset-2">
+                  Gon이 고르게 하기
+                </button>
               </div>
             )}
 
-            {/* 샘플 지시 칩 */}
             {!result && !isLoading && (
-              <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                <span className="text-xs text-slate-500">추천 업무:</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm text-faint">이런 요청은 어때요</span>
                 {SAMPLES.map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => setQuery(s)}
-                    className="h-7 px-3 rounded-full border border-slate-300 bg-white text-xs text-slate-600 hover:text-emerald-800 hover:border-emerald-600 shadow-sm transition-colors"
+                    className="min-h-8 px-3 py-1 rounded-full border border-line bg-surface text-sm text-sub hover:text-ink hover:border-faint text-left transition-colors duration-200 ease-out"
                   >
-                    "{s}"
+                    {s}
                   </button>
                 ))}
               </div>
@@ -390,54 +363,37 @@ export function App() {
           </form>
 
           {error && (
-            <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+            <div role="alert" className="flex items-start gap-2 rounded border border-danger/30 bg-danger-soft px-4 py-3 text-sm text-danger">
               <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
               <span>{error}</span>
             </div>
           )}
         </section>
 
-        {/* 3. 인터랙티브 가상 오피스 스테이지 (Virtual Office Floor) */}
-        <section className="space-y-3">
-          <OfficeFloor
-            desks={desks}
-            activeAgentIds={activeAgentIds}
-            failedAgentIds={failedAgentIds}
-            workingAgentIds={workingAgentIds}
-            selectedAgentId={selectedAgentId}
-            onSelectAgent={setSelectedAgentId}
-            onOpenRosterSlot={(slotIdx) => {
-              setTargetSlotIndex(slotIdx);
-              setIsRosterOpen(true);
-            }}
-            onOpenRosterPool={() => {
-              setTargetSlotIndex(null);
-              setIsRosterOpen(true);
-            }}
-            currentQuery={query}
-          />
-        </section>
+        <OfficeFloor
+          desks={desks}
+          activeAgentIds={activeAgentIds}
+          failedAgentIds={failedAgentIds}
+          workingAgentIds={workingAgentIds}
+          finished={!!result}
+          planning={planning}
+          selectedAgentId={selectedAgentId}
+          onSelectAgent={setSelectedAgentId}
+          onOpenRosterSlot={(slotIdx) => {
+            setTargetSlotIndex(slotIdx);
+            setIsRosterOpen(true);
+          }}
+          currentQuery={isLoading || result ? result?.query ?? query : ''}
+        />
 
-        {/* 4. 실시간 에이전트 작업 스트림 로그 */}
         <ActivityFeed items={feed} live={isLoading} />
 
-        {/* 로딩 스켈레톤 인디케이터 */}
-        {isLoading && !result && desks.length > 0 && (
-          <section className="rounded-xl border border-slate-200 bg-white p-6 space-y-2.5 animate-pulse shadow-sm">
-            <div className="h-3.5 rounded-full bg-slate-200 w-11/12" />
-            <div className="h-3.5 rounded-full bg-slate-200 w-9/12" />
-            <div className="h-3.5 rounded-full bg-slate-200 w-10/12" />
-          </section>
-        )}
-
-        {/* 5. 오피스 통합 결과물 & AI 리터러시 코치 뷰어 */}
         {result && (
-          <section className="space-y-6 pt-2">
-            <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-slate-200">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600" />
-                <h2 className="text-lg font-bold text-slate-900">오피스 통합 산출물</h2>
-              </div>
+          <section aria-labelledby="result-title" className="space-y-5 anim-rise">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-line">
+              <h2 id="result-title" className="text-lg font-semibold">
+                결과
+              </h2>
               <ExportActionBar
                 query={result.query}
                 content={result.final_content}
@@ -448,38 +404,36 @@ export function App() {
               />
             </div>
 
-            {/* 소셜 공유용 프롬프트 레시피 카드 */}
-            {showRecipeCard && (
-              <div className="transition-all">
-                <PromptRecipeCard query={result.query} team={resultTeam} promptCoachTip={result.prompt_coach_tip} />
-              </div>
+            {result.mode === 'stub' && (
+              <p className="rounded border border-line bg-sunken px-4 py-3 text-sm text-sub">
+                AI가 연결되지 않아 시험용 결과예요. 실제 작업은 하지 않았어요.
+              </p>
             )}
 
-            {/* 메인 결과 리포트 본문 */}
-            <article className="rounded-2xl border border-slate-300 bg-white p-6 sm:p-8 text-[15px] leading-relaxed text-slate-800 shadow-sm whitespace-pre-wrap font-sans">
+            {showRecipeCard && <PromptRecipeCard query={result.query} team={resultTeam} promptCoachTip={result.prompt_coach_tip} />}
+
+            <article className="rounded-lg border border-line bg-surface p-6 sm:p-8 text-base leading-7 text-ink whitespace-pre-wrap">
               {result.final_content}
             </article>
 
-            {/* 전문가별 개별 기여 내역 아코디언 */}
-            <details className="rounded-xl border border-slate-200 bg-white group overflow-hidden shadow-sm">
-              <summary className="px-5 py-4 text-sm font-bold text-slate-800 cursor-pointer select-none hover:bg-slate-50 transition-colors flex items-center justify-between">
-                <span>전문가별 개별 작업 기록 열람 ({result.experts.length}명)</span>
-                <span className="text-xs text-slate-400 font-normal">자세히 보기 ▼</span>
+            <details className="rounded-lg border border-line bg-surface">
+              <summary className="px-5 py-4 text-sm font-medium cursor-pointer select-none hover:bg-ground rounded-lg transition-colors duration-200 ease-out">
+                전문가별 작업 기록 ({result.experts.length}명)
               </summary>
-              <div className="divide-y divide-slate-100 border-t border-slate-100">
+              <div className="divide-y divide-line border-t border-line">
                 {result.experts.map((x) => {
                   const entry = result.agent_logs[x.id];
                   const failed = entry?.status === 'failed';
                   return (
-                    <article key={x.id} className="p-5 sm:p-6 bg-slate-50/50">
-                      <header className="flex items-center gap-2.5 mb-2.5">
+                    <article key={x.id} className="p-5">
+                      <header className="flex items-center gap-2.5 mb-2">
                         <Avatar accent={x.accent} name={x.name} size={30} />
                         <div>
-                          <h3 className="text-sm font-bold text-slate-900">{x.name}</h3>
-                          <p className="text-xs text-slate-500">{x.task}</p>
+                          <h3 className="text-sm font-semibold">{x.name}</h3>
+                          <p className="text-sm text-sub">{x.task}</p>
                         </div>
                       </header>
-                      <p className={`text-sm leading-relaxed whitespace-pre-wrap ${failed ? 'text-rose-600' : 'text-slate-700'}`}>
+                      <p className={`text-sm leading-6 whitespace-pre-wrap ${failed ? 'text-danger' : 'text-sub'}`}>
                         {failed ? `작업 실패: ${entry?.log}` : entry?.log}
                       </p>
                     </article>
@@ -488,31 +442,24 @@ export function App() {
               </div>
             </details>
 
-            {/* AI 리터러시 사후 코칭 (Prompt Coach) 카드 */}
-            <aside className="rounded-2xl bg-gradient-to-br from-emerald-900 to-slate-900 text-white p-6 shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-xs font-bold text-emerald-300 uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>AI 리터러시 성장 코치 (Prompt Level-Up)</span>
-                </div>
-                <p className="text-sm sm:text-base leading-relaxed text-slate-200">
-                  {result.prompt_coach_tip}
-                </p>
+            <aside className="rounded-lg border border-accent/25 bg-accent-soft p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-accent">다음엔 이렇게 물어보세요</h3>
+                <p className="mt-1 text-base leading-7 text-ink">{result.prompt_coach_tip}</p>
               </div>
               <button
                 type="button"
                 onClick={reset}
-                className="shrink-0 inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold transition-all"
+                className="shrink-0 h-10 px-4 rounded border border-accent/40 bg-surface text-sm font-medium text-accent hover:bg-white inline-flex items-center gap-2 transition-colors duration-200 ease-out"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>새로운 업무 지시</span>
+                <RotateCcw className="w-4 h-4" aria-hidden />
+                새 요청
               </button>
             </aside>
           </section>
         )}
       </main>
 
-      {/* 6. 인재풀 사이드 드로어 */}
       <RosterDrawer
         isOpen={isRosterOpen}
         onClose={() => {
@@ -524,16 +471,13 @@ export function App() {
         currentTeamIds={customTeam.map((c) => c.id)}
       />
 
-      {/* 7. 에이전트 개별 모니터 터미널 모달 */}
       <AgentTerminalModal
         agent={selectedAgent}
         log={selectedAgentId ? texts[selectedAgentId] : undefined}
         onClose={() => setSelectedAgentId(null)}
       />
 
-      <footer className="border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-        Gon Studio · 전국민 AI 평준화 가상 오피스
-      </footer>
+      <footer className="border-t border-line py-6 text-center text-sm text-faint">Gon · 전국민 AI 평준화</footer>
     </div>
   );
 }

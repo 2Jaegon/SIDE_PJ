@@ -84,3 +84,22 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* 걷는 사람: 몸이 오르내리고 다리가 번갈아 움직인다. 앉아서 일할 때는 손이 번갈아 자판을 두드린다 */
+@keyframes walk-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes leg-swing {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+@keyframes hand-tap {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.walk-bob { animation: walk-bob 0.5s ease-in-out infinite; }
+.leg-a { animation: leg-swing 0.5s ease-in-out infinite; }
+.leg-b { animation: leg-swing 0.5s ease-in-out 0.25s infinite; }
+.hand-a { animation: hand-tap 0.4s ease-in-out infinite; }
+.hand-b { animation: hand-tap 0.4s ease-in-out 0.2s infinite; }
