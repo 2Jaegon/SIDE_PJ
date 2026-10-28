@@ -29,3 +29,5 @@ AGENTS.md
 CLAUDE.md
 GEMINI.md
 skills-lock.json
+install.ps1
+install.sh

@@ -6,12 +6,13 @@ import {
   RotateCcw, 
   Lightbulb, 
   Users, 
-  FileText,
   UserPlus
 } from 'lucide-react';
 import { OfficeFloor, DeskData } from './components/OfficeFloor';
 import { AgentTerminalModal } from './components/AgentTerminalModal';
 import { RosterDrawer, AgentTemplate } from './components/RosterDrawer';
+import { ExportActionBar } from './components/ExportActionBar';
+import { PromptRecipeCard } from './components/PromptRecipeCard';
 
 interface OfficeDispatchResponse {
   query: string;
@@ -33,6 +34,7 @@ export function App() {
   const [workingAgentIds, setWorkingAgentIds] = useState<string[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [dispatchResult, setDispatchResult] = useState<OfficeDispatchResponse | null>(null);
+  const [showRecipeCard, setShowRecipeCard] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // 추천 샘플 지시어
@@ -246,46 +248,61 @@ export function App() {
 
         {/* 3. 오피스 통합 산출물 & 리터러시 코치 카드 */}
         {dispatchResult && (
-          <div className="space-y-6 pt-4 animate-in fade-in-50 duration-500">
-            {/* 상단 액션 바 */}
-            <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <span className="text-xs font-bold text-white">
-                  출근 팀원 ({dispatchResult.active_agent_ids.length}명) 합동 업무 완료 보고서
-                </span>
+          <div className="space-y-5 pt-4 animate-in fade-in-50 duration-500">
+            {/* 산출물 내보내기 & 공유 액션 바 */}
+            <ExportActionBar
+              query={dispatchResult.query}
+              content={dispatchResult.final_content}
+              team={desks.filter((d) => dispatchResult.active_agent_ids.includes(d.id))}
+              promptCoachTip={dispatchResult.prompt_coach_tip}
+              showRecipeCard={showRecipeCard}
+              onToggleRecipeCard={() => setShowRecipeCard(!showRecipeCard)}
+            />
+
+            {/* 토글 시 노출되는 공유용 프롬프트 레시피 카드 */}
+            {showRecipeCard && (
+              <div className="animate-in fade-in zoom-in-95 duration-300">
+                <PromptRecipeCard
+                  query={dispatchResult.query}
+                  team={desks.filter((d) => dispatchResult.active_agent_ids.includes(d.id))}
+                  promptCoachTip={dispatchResult.prompt_coach_tip}
+                />
               </div>
+            )}
+
+            {/* 통합 보고서 본문 카드 */}
+            <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 text-slate-200 shadow-2xl leading-relaxed whitespace-pre-wrap font-sans text-sm sm:text-base border-l-4 border-l-amber-500">
+              {dispatchResult.final_content}
+            </div>
+
+            {/* 💡 [Michael's Tip] AI 평준화 리터러시 코치 카드 */}
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-900 to-indigo-950/30 border border-amber-500/20 flex items-start justify-between gap-3.5 shadow-xl">
+              <div className="flex items-start gap-3.5">
+                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 shrink-0">
+                  <Lightbulb className="w-5 h-5" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider">
+                    Michael's AI 평준화 코칭 (Prompt Literacy)
+                  </h4>
+                  <p className="text-xs sm:text-sm text-slate-300">
+                    {dispatchResult.prompt_coach_tip}
+                  </p>
+                </div>
+              </div>
+
               <button
                 onClick={() => {
                   setDispatchResult(null);
                   setActiveAgentIds([]);
                   setQuery('');
+                  setShowRecipeCard(false);
                 }}
-                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors"
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 transition-colors shrink-0 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700"
               >
-                <RotateCcw className="w-3 h-3" />
-                새 업무 지시
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>새 업무 지시</span>
               </button>
-            </div>
-
-            {/* 통합 보고서 본문 */}
-            <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 text-slate-200 shadow-2xl leading-relaxed whitespace-pre-wrap font-sans text-sm sm:text-base border-l-4 border-l-amber-500">
-              {dispatchResult.final_content}
-            </div>
-
-            {/* 💡 [Michael's Tip] AI 평준화 리터러시 코치 */}
-            <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-950/30 via-slate-900 to-indigo-950/30 border border-amber-500/20 flex items-start gap-3.5 shadow-xl">
-              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 shrink-0">
-                <Lightbulb className="w-5 h-5" />
-              </div>
-              <div className="space-y-1">
-                <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider">
-                  Michael's AI 평준화 코칭 (Prompt Literacy)
-                </h4>
-                <p className="text-xs sm:text-sm text-slate-300">
-                  {dispatchResult.prompt_coach_tip}
-                </p>
-              </div>
             </div>
           </div>
         )}
