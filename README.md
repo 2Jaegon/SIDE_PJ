@@ -43,7 +43,7 @@ python Gon/gon.py doctor  # 상태 점검
 
 ## 서비스: 멀티 에이전트
 
-- 요청을 보내면 **Gon**이 전문가 풀(스킬 + 프롬프트 46개)에서 필요한 전문가만 골라 과업을 나눈다. 전문가는 자기 스킬 지침을 근거로 병렬로 일하고, Gon이 결과를 하나로 합친다. 고정 인원은 없고 요청마다 편성이 달라진다(최대 `SKILLBRIDGE_MAX_EXPERTS`명, 기본 8).
+- 요청을 보내면 **Gon**이 전문가 풀(스킬 + 프롬프트 46개)에서 필요한 전문가만 골라 과업을 나눈다. 전문가는 자기 스킬 지침을 근거로 병렬로 일하고, Gon이 결과를 하나로 합친다. 고정 인원은 없고 요청마다 편성이 달라진다(최대 `GON_MAX_EXPERTS`명, 기본 8).
 - Antigravity CLI(`agy`)로 실행한다. 호출은 요청 1건에 `편성 1 + 전문가 N + 코칭 1 + 종합 1`번, 약 1~2분 걸리며 구독 한도를 IDE와 나눠 쓴다. `agy`가 없으면 시험용 결과를 보여 주고 화면에 그렇다고 표시한다.
   - 설치: `winget install Google.AntigravityCLI` 후 한 번 로그인
-  - 환경변수: `SKILLBRIDGE_LLM=stub`(AI 끄기), `SKILLBRIDGE_LLM_WORKERS=4`(동시 호출 수), `SKILLBRIDGE_MAX_EXPERTS=8`(전문가 상한), `AGY_PATH`(agy 위치 직접 지정)
+  - 환경변수: `GON_LLM=stub`(AI 끄기), `GON_LLM_WORKERS=4`(동시 호출 수), `GON_MAX_EXPERTS=8`(전문가 상한), `AGY_PATH`(agy 위치 직접 지정)

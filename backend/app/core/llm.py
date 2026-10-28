@@ -1,7 +1,7 @@
 """
 LLM 호출. 키 없이 Google AI Pro 구독 안에서 쓸 수 있는 Antigravity CLI(`agy -p`)를 사용한다.
 
-- agy가 없거나 SKILLBRIDGE_LLM=stub 이면 available()이 False이고, 호출하는 쪽은 시험용 결과로 대체한다.
+- agy가 없거나 GON_LLM=stub 이면 available()이 False이고, 호출하는 쪽은 시험용 결과로 대체한다.
 - agy는 빈 임시 폴더에서 실행한다. 사용자 요청이 프로젝트 파일을 건드리지 못하게 하려는 것이다.
 - 도구 실행 승인(--dangerously-skip-permissions)은 쓰지 않는다.
 """
@@ -34,7 +34,7 @@ def find_agy() -> Optional[str]:
 
 
 def available() -> bool:
-    return os.getenv("SKILLBRIDGE_LLM", "auto").lower() != "stub" and find_agy() is not None
+    return os.getenv("GON_LLM", "auto").lower() != "stub" and find_agy() is not None
 
 
 def _decode(raw: bytes) -> str:
