@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Pin, Plus } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { Person, DeskFurniture, Spot, spotStyle, DeskScreen } from './OfficeSprites';
 
 export interface DeskData {
@@ -26,30 +26,19 @@ interface OfficeFloorProps {
   selectedAgentId: string | null;
   onSelectAgent: (id: string) => void;
   onOpenRosterSlot?: (slotIndex: number) => void;
-  currentQuery?: string;
 }
 
-// 바닥 치수(px). 책상 위 칸은 총괄, 그 아래 줄이 전문가 책상이다.
+// 바닥 치수(px). 위쪽은 총괄 책상, 그 아래가 보고 줄, 맨 아래 줄들이 전문가 책상이다.
+// 바닥이 이보다 크면 남는 높이를 책상 줄 사이에 나눠 화면 전체를 쓴다.
 const DESK_W = 120;
-const LEAD_Y = 52; // 총괄 책상 윗변
-const QUEUE_FEET_Y = 170; // 보고하러 온 전문가가 서는 줄의 발 위치
-const WORKER_Y = 228; // 첫 줄 전문가 책상 윗변
+const LEAD_Y = 52;
+const QUEUE_GAP = 118; // 총괄 책상에서 보고 줄 발까지
+const WORKER_GAP = 176; // 총괄 책상에서 첫 전문가 책상까지(최소)
 const ROW_H = 152;
+const BOTTOM = 110;
 const EMPTY_SEATS = 4;
-const SEAT_DX = -26; // 앉은 사람은 책상 중심에서 왼쪽, 모니터는 오른쪽
-const SURFACE = 26; // 책상 윗변에서 앉은 사람 발까지
-
-const useWide = () => {
-  const q = '(min-width: 640px)';
-  const [wide, setWide] = useState(() => (typeof window === 'undefined' ? true : window.matchMedia(q).matches));
-  useEffect(() => {
-    const m = window.matchMedia(q);
-    const on = () => setWide(m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  }, []);
-  return wide;
-};
+const SEAT_DX = -26;
+const SURFACE = 26;
 
 const statusText = (s: 'idle' | 'working' | 'reporting' | 'done' | 'failed') =>
   ({ idle: '대기', working: '작업 중', reporting: '보고하는 중', done: '완료', failed: '실패' })[s];
@@ -64,23 +53,38 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
   selectedAgentId,
   onSelectAgent,
   onOpenRosterSlot,
-  currentQuery = '',
 }) => {
-  const wide = useWide();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const leadDesk = desks.find((d) => d.id === 'lead');
   const workers = desks.filter((d) => d.id !== 'lead');
   const seats = workers.length > 0 ? workers.length : EMPTY_SEATS;
-  const cols = wide ? Math.min(seats, 4) : 2;
+  const cols = box.w >= 560 ? Math.min(seats, 4) : 2;
   const rows = Math.ceil(seats / cols);
-  const height = WORKER_Y + (rows - 1) * ROW_H + 110;
+
+  const minH = LEAD_Y + WORKER_GAP + (rows - 1) * ROW_H + BOTTOM;
+  const height = Math.max(minH, box.h);
+  const free = height - minH;
+  const leadY = LEAD_Y + free * 0.08;
+  const workerY = leadY + WORKER_GAP + free * 0.32;
+  const rowH = ROW_H + (free * 0.5) / rows;
 
   const deskSpot = (i: number): Spot => ({
     xPct: (((i % cols) + 0.5) / cols) * 100,
     dx: 0,
-    y: WORKER_Y + Math.floor(i / cols) * ROW_H,
+    y: workerY + Math.floor(i / cols) * rowH,
   });
   const seatOf = (d: Spot): Spot => ({ ...d, dx: SEAT_DX, y: d.y + SURFACE });
-  const leadSpot: Spot = { xPct: 50, dx: 0, y: LEAD_Y };
+  const leadSpot: Spot = { xPct: 50, dx: 0, y: leadY };
   const door: Spot = { xPct: 0, dx: 16, y: height - 16 };
 
   const stateOf = (id: string) => {
@@ -92,36 +96,17 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
 
   const reportingIds = workers.filter((w) => stateOf(w.id) === 'reporting').map((w) => w.id);
   const leadWorking = !!leadDesk && workingAgentIds.includes(leadDesk.id);
+  const busy = workingAgentIds.length > 0 || planning;
 
   return (
-    <section aria-label="사무실" className="rounded-lg border border-line bg-surface">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 py-3.5 border-b border-line">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <span
-            className={`w-2 h-2 rounded-full shrink-0 ${workingAgentIds.length > 0 || planning ? 'working-dot bg-accent' : 'bg-line'}`}
-            aria-hidden
-          />
-          <h2 className="text-base font-semibold text-ink">사무실</h2>
-          <span className="text-sm text-sub">
-            {planning
-              ? 'Gon이 팀을 편성하고 있어요'
-              : workers.length > 0
-              ? `${workers.length}명이 일하고 있어요`
-              : '요청을 기다리는 중이에요'}
-          </span>
-        </div>
+    <section aria-label="사무실" className="h-full flex flex-col min-h-0">
+      <div className="flex items-center gap-2.5 px-4 h-11 shrink-0 border-b border-line bg-surface">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${busy ? 'working-dot bg-accent' : 'bg-line'}`} aria-hidden />
+        <h2 className="text-sm font-semibold text-ink">사무실</h2>
+        <span className="text-sm text-faint">{planning ? '편성 중' : workers.length > 0 ? `${workers.length}명` : '대기 중'}</span>
       </div>
 
-      <div className="px-4 sm:px-5 pt-4">
-        <div className="flex items-start gap-2 rounded border border-line bg-ground px-3 py-2.5">
-          <Pin className="w-4 h-4 mt-0.5 text-accent shrink-0" aria-hidden />
-          <p className={`text-sm leading-6 ${currentQuery ? 'text-ink' : 'text-faint'}`}>
-            {currentQuery ? `오늘의 과제: ${currentQuery}` : '요청을 보내면 여기에 과제가 붙고, 전문가들이 입구에서 걸어 들어와 일을 나눠요.'}
-          </p>
-        </div>
-      </div>
-
-      <div className="p-4 sm:p-5">
+      <div ref={wrapRef} className="flex-1 min-h-0 overflow-auto p-3">
         <div
           className="relative overflow-hidden rounded-lg border border-line bg-ground"
           style={{
@@ -131,7 +116,6 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
             backgroundSize: '40px 40px',
           }}
         >
-          {/* 입구 */}
           <div
             className="absolute left-0 flex items-end text-xs text-faint pl-2 pb-0.5"
             style={{ top: height - 34, width: 64, height: 34, borderTop: '1px solid #c9c8c2', borderRight: '1px solid #c9c8c2' }}
@@ -144,10 +128,7 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
             <DeskFurniture screen={leadWorking ? 'working' : 'off'} />
           </div>
           <Person accent="emerald" spot={seatOf(leadSpot)} seated working={leadWorking} />
-          <div
-            className="absolute z-10"
-            style={{ left: `calc(50% + ${DESK_W / 2 + 8}px)`, top: LEAD_Y - 6, maxWidth: 120 }}
-          >
+          <div className="absolute z-10" style={{ left: `calc(50% + ${DESK_W / 2 + 8}px)`, top: leadY - 6, maxWidth: 120 }}>
             {leadDesk ? (
               <button
                 type="button"
@@ -179,13 +160,10 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
                       type="button"
                       disabled={!onOpenRosterSlot}
                       onClick={() => onOpenRosterSlot?.(i)}
-                      className="mt-1 w-full rounded px-1 py-1 text-center text-xs text-faint hover:text-accent hover:bg-surface disabled:hover:bg-transparent disabled:hover:text-faint transition-colors duration-200 ease-out"
+                      aria-label={`${i + 1}번 자리에 전문가 앉히기`}
+                      className="mt-1.5 mx-auto w-8 h-8 rounded-full border border-dashed border-faint text-faint inline-flex items-center justify-center hover:border-accent hover:text-accent hover:bg-surface disabled:hover:border-faint disabled:hover:text-faint disabled:hover:bg-transparent transition-colors duration-200 ease-out"
                     >
-                      <span className="block text-sm text-sub">빈 자리 {i + 1}</span>
-                      <span className="inline-flex items-center gap-1">
-                        <Plus className="w-3 h-3" aria-hidden />
-                        전문가 앉히기
-                      </span>
+                      <Plus className="w-4 h-4" aria-hidden />
                     </button>
                   </div>
                 );
@@ -225,7 +203,7 @@ export const OfficeFloor: React.FC<OfficeFloorProps> = ({
             const seat = seatOf(deskSpot(i));
             const k = reportingIds.indexOf(d.id);
             const m = reportingIds.length;
-            const queue: Spot = { xPct: 50, dx: (k - (m - 1) / 2) * 36, y: QUEUE_FEET_Y };
+            const queue: Spot = { xPct: 50, dx: (k - (m - 1) / 2) * 36, y: leadY + QUEUE_GAP };
             const atLead = st === 'reporting';
             return (
               <Person
