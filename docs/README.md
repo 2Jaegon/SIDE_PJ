@@ -45,8 +45,7 @@ flowchart TD
 | `GET` | `/api/office/experts` | 46명 전체 전문가 카탈로그 | 없음 | `{"experts": [{"id": "...", "name": "...", "kind": "...", "cluster": "...", "accent": "...", "use_for": "..."}]}` |
 | `POST` | `/api/office/dispatch-stream` | 멀티 에이전트 실행 및 NDJSON 스트리밍 | `{"query": "요청문", "selected_expert_ids": ["id1", "id2"]}` (선택 배열 생략 가능) | `application/x-ndjson` (이벤트 순서: `start` → `plan` → `agent`... → `synthesis` → `final`) |
 
-> `backend/app/core/orchestrator.py` 및 구버전 엔드포인트(`/api/skills`, `/api/route`, `/api/generate`)는 레거시 코드로 현재 프런트엔드에서 호출하지 않으며 정리 예정이다.  
-> `GET /api/office/layout`은 이전 브라우저 탭 세션과의 호환을 위한 임시 응답이다.
+> 키워드 기반 옛 라우터(`orchestrator.py`)와 `/api/skills`, `/api/route`, `/api/generate`, 호환용 임시 응답(`/api/office/layout`, `/v1/models`)은 제거했다. 선택은 AI가 요구사항을 분석해서 하며, 외부 API 키는 쓰지 않는다.
 
 ---
 
@@ -90,6 +89,4 @@ python -m pytest -q
 
 ## 5. 확인 필요
 
-1. **레거시 라우터 정리 시점:** `backend/app/core/orchestrator.py` 및 `/api/skills`, `/api/route`, `/api/generate`의 삭제 및 정리 일정 결정 필요.
-2. **도구 프로브 라우트 유지 여부:** IDE나 외부 클라이언트의 모델 조회 404를 막기 위해 추가된 `GET /v1/models`의 공식 API 채택 여부.
-3. **전문가 풀 동적 확장:** 현재 `registry/skills.json`(43개)과 `prompt/*.md`(3개)의 46명 구조에서 외부 스킬(`status: external`) 추가 시 자동 반영 정책.
+1. **전문가 풀 동적 확장:** 현재 `registry/skills.json`(43개)과 `prompt/*.md`(3개)의 46명 구조에서 외부 스킬(`status: external`) 추가 시 자동 반영 정책.

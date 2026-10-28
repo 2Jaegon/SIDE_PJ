@@ -31,10 +31,6 @@ async def root():
         "mission": "전국민 AI 평준화"
     }
 
-@app.get("/v1/models")
-async def models():
-    return {"object": "list", "data": [{"id": "gon-gemini", "object": "model", "owned_by": "gon"}]}
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.main:app", host=settings.HOST, port=settings.PORT, reload=True)
