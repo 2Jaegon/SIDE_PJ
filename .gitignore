@@ -1,0 +1,28 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies and virtual environments
+.venv/
+node_modules/
+
+# Build outputs and caches
+dist/
+__pycache__/
+*.py[cod]
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# AI Assistant Workspace (Managed separately in https://github.com/2Jaegon/Gon.git)
+Gon/
+.agents/
+.claude/
+AGENTS.md
+skills-lock.json
