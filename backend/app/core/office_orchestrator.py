@@ -1,173 +1,154 @@
-from dataclasses import dataclass
-from typing import List, Dict, Any
+import os
+import json
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 
-@dataclass
-class AgentDeskProfile:
-    id: str
-    name: str
-    role_korean: str
-    character_name: str  # The Office 모티브
-    badge_label: str
-    avatar_color: str
-    desk_coord: Dict[str, int]  # x, y percentage
-    description: str
-    system_instruction: str
-    keywords: List[str]
+TEMPLATES_DIR = Path(__file__).parent / "agent_templates"
 
-# Munder Difflin 스타일의 가상 오피스 에이전트 팀
-OFFICE_ROSTER: Dict[str, AgentDeskProfile] = {
-    "gon-boss": AgentDeskProfile(
-        id="gon-boss",
-        name="Gon (총괄 매니저)",
-        role_korean="총괄 비서 & 업무 분배",
-        character_name="Michael",
-        badge_label="팀 리더",
-        avatar_color="from-amber-400 to-orange-500",
-        desk_coord={"x": 50, "y": 20},
-        description="사용자의 의도를 분석하고 전문 에이전트들에게 업무를 할당하는 수석 비서",
-        system_instruction="사용자의 자연어 질문을 분석하여 하위 에이전트들에게 명확한 하위 업무를 할당하십시오.",
-        keywords=["총괄", "전체", "관리"]
-    ),
-    "k-planner": AgentDeskProfile(
-        id="k-planner",
-        name="K-기획자",
-        role_korean="전략 기획 & 사업 보고서",
-        character_name="Jim",
-        badge_label="국내 표준 기획",
-        avatar_color="from-blue-400 to-indigo-600",
-        desk_coord={"x": 20, "y": 55},
-        description="대한민국 공공/기업 표준 규격 기획서 작성",
-        system_instruction="대한민국 표준 보고서 규격(추진배경-목적-현황분석-추진계획-기대효과)으로 기획서를 작성하십시오.",
-        keywords=["기획", "사업계획", "보고서", "제안서", "전략", "정부지원", "공문"]
-    ),
-    "taste-designer": AgentDeskProfile(
-        id="taste-designer",
-        name="Taste 디자이너",
-        role_korean="UI/UX & 브랜드 비주얼",
-        character_name="Pam",
-        badge_label="세련된 미감 (No-Slop)",
-        avatar_color="from-purple-400 to-pink-500",
-        desk_coord={"x": 40, "y": 55},
-        description="절제된 타이포그래피, 넉넉한 여백, 현대적 미니멀 UI 명세",
-        system_instruction="Awwwards 수상작 수준의 정제된 UI/UX 레이아웃, 컬러 팔레트, 타이포그래피 위계를 제시하십시오.",
-        keywords=["디자인", "웹디자인", "UI", "UX", "레이아웃", "랜딩페이지", "색상", "여백", "스타일"]
-    ),
-    "karpathy-dev": AgentDeskProfile(
-        id="karpathy-dev",
-        name="Karpathy 엔지니어",
-        role_korean="클린 코드 & 시스템 구현",
-        character_name="Dwight",
-        badge_label="본질적 클린 코드",
-        avatar_color="from-emerald-400 to-teal-600",
-        desk_coord={"x": 60, "y": 55},
-        description="First-Principles 기반 군더더기 없는 즉시 실행 가능한 고성능 코드",
-        system_instruction="불필요한 추상화 없는 가장 단순하고 본질적인 파이썬/타입스크립트 코드를 작성하십시오.",
-        keywords=["코드", "파이썬", "개발", "리팩토링", "알고리즘", "백엔드", "함수", "스크립트"]
-    ),
-    "court-validator": AgentDeskProfile(
-        id="court-validator",
-        name="Court 검증관",
-        role_korean="논리 검증 & 팩트체크",
-        character_name="Angela",
-        badge_label="반론 검증 & 무결성",
-        avatar_color="from-rose-400 to-red-600",
-        desk_coord={"x": 80, "y": 55},
-        description="논리적 비약과 허점, 시장 리스크를 사전에 필터링하는 냉철한 감사관",
-        system_instruction="결과물에 대해 냉철한 반론을 제기하고 리스크 극복 방안을 명확히 제시하십시오.",
-        keywords=["검증", "논리", "반론", "팩트", "오류", "분석", "비판", "리스크"]
-    )
-}
+class MunderDifflinOrchestrator:
+    """Munder Difflin 실제 36개 공식 에이전트 템플릿 기반 오케스트레이터"""
 
-class OfficeOrchestrator:
     def __init__(self):
-        self.roster = OFFICE_ROSTER
+        self.templates: Dict[str, Dict[str, Any]] = {}
+        self.load_all_templates()
 
-    def get_office_layout(self) -> List[Dict[str, Any]]:
-        return [
-            {
-                "id": a.id,
-                "name": a.name,
-                "role_korean": a.role_korean,
-                "character_name": a.character_name,
-                "badge_label": a.badge_label,
-                "avatar_color": a.avatar_color,
-                "desk_coord": a.desk_coord,
-                "description": a.description
-            }
-            for a in self.roster.values()
+    def load_all_templates(self):
+        if not TEMPLATES_DIR.exists():
+            return
+
+        for file_path in TEMPLATES_DIR.glob("*.agent.json"):
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    agent_id = file_path.stem.replace(".agent", "")
+                    self.templates[agent_id] = {
+                        "id": agent_id,
+                        "name": data.get("name", agent_id),
+                        "description": data.get("description", ""),
+                        "character": data.get("configs", {}).get("character", "worker"),
+                        "accent": data.get("configs", {}).get("accent", "slate"),
+                        "role": data.get("configs", {}).get("role", ""),
+                        "goal": data.get("configs", {}).get("goal", ""),
+                        "capabilities": data.get("configs", {}).get("capabilities", []),
+                        "mcp_servers": data.get("mcpServers", {}).get("catalog", []),
+                        "skills": data.get("skills", {}).get("catalog", [])
+                    }
+            except Exception as e:
+                print(f"Error loading {file_path}: {e}")
+
+    def get_all_agents(self) -> List[Dict[str, Any]]:
+        return list(self.templates.values())
+
+    def get_active_office_team(self, query: str = "") -> List[Dict[str, Any]]:
+        """질문에 맞춰 2D 오피스에 배치할 핵심 5인 팀 선별 (기본: Michael + 핵심 4인)"""
+        # 기본 핵심 오피스 라인업
+        primary_ids = [
+            "frontend-developer",       # Jim (Frontend Developer)
+            "product-designer",          # Pam (Product Designer)
+            "backend-and-full-stack-engineer", # Dwight (Backend Engineer)
+            "qa-and-test-engineer",      # Angela (QA Engineer)
+            "growth-marketer"            # Ryan (Growth Marketer)
         ]
 
-    def dispatch_office_tasks(self, query: str) -> Dict[str, Any]:
-        """사용자 요청에 대해 가상 오피스 에이전트들이 각자 수행할 태스크 및 산출물 분배"""
         query_lower = query.lower()
-        active_agents = ["gon-boss"]  # 총괄은 항상 활성
-
-        for aid, agent in self.roster.items():
-            if aid == "gon-boss":
-                continue
-            for kw in agent.keywords:
-                if kw in query_lower:
-                    active_agents.append(aid)
+        # 질문 키워드에 따라 관련 템플릿 우선 매칭
+        matched_ids = []
+        for aid, tmpl in self.templates.items():
+            for cap in tmpl["capabilities"]:
+                if cap.lower() in query_lower or tmpl["name"].lower() in query_lower:
+                    matched_ids.append(aid)
                     break
 
-        # 매칭된 서브 에이전트가 없으면 기본으로 기획자 + 디자이너 투입
-        if len(active_agents) == 1:
-            active_agents.extend(["k-planner", "taste-designer", "court-validator"])
+        selected_ids = list(dict.fromkeys(matched_ids + primary_ids))[:5]
 
-        # 각 에이전트별 개별 작업 로그(가상 터미널 출력용) 생성
-        agent_logs: Dict[str, Dict[str, Any]] = {}
-        for aid in active_agents:
-            agent = self.roster[aid]
-            if aid == "gon-boss":
-                log = f"사용자 요구사항 '{query}' 접수 완료. 하위 {len(active_agents)-1}명의 전문 에이전트에게 업무 티켓 발송."
-            elif aid == "k-planner":
-                log = f"대한민국 공공/기업 표준 포맷으로 '{query}'에 대한 사업 배경 및 3단계 실행 로드맵 수립 완료."
-            elif aid == "taste-designer":
-                log = f"고급스러운 Zinc/Slate 모노톤 팔레트와 넉넉한 타이포그래피 계층을 설계하여 AI 티를 배제함."
-            elif aid == "karpathy-dev":
-                log = f"오버엔지니어링 없는 본질 중심의 미니멀 아키텍처 및 즉각 실행 가능한 클린 코드 도출."
-            elif aid == "court-validator":
-                log = f"논리적 비약과 잠재적 리스크(경쟁사 대응, 실행 예산 부족)에 대한 반론 검토 및 방어 대책 마련."
-            else:
-                log = f"{agent.name} 작업 완료."
+        # 2D 오피스 좌표 계산 (중앙 Michael + 하단 4인 데스크)
+        coords = [
+            {"x": 20, "y": 60},
+            {"x": 40, "y": 60},
+            {"x": 60, "y": 60},
+            {"x": 80, "y": 60},
+            {"x": 50, "y": 25}
+        ]
 
-            agent_logs[aid] = {
-                "name": agent.name,
-                "role": agent.role_korean,
+        team = []
+        for idx, aid in enumerate(selected_ids):
+            tmpl = self.templates.get(aid, {
+                "id": aid,
+                "name": aid.replace("-", " ").title(),
+                "character": "worker",
+                "accent": "slate",
+                "role": "Agent Worker",
+                "goal": "Complete the assigned mission."
+            })
+            
+            coord = coords[idx] if idx < len(coords) else {"x": 50, "y": 50}
+            team.append({
+                "id": tmpl["id"],
+                "name": tmpl["name"],
+                "character_name": tmpl["character"].capitalize(),
+                "role_korean": tmpl["name"],
+                "badge_label": tmpl["capabilities"][0] if tmpl.get("capabilities") else "전문가",
+                "accent": tmpl["accent"],
+                "desk_coord": coord,
+                "description": tmpl.get("description", ""),
+                "role_prompt": tmpl.get("role", ""),
+                "goal": tmpl.get("goal", ""),
+                "skills": tmpl.get("skills", []),
+                "mcp_servers": tmpl.get("mcp_servers", [])
+            })
+
+        return team
+
+    def dispatch_tasks(self, query: str) -> Dict[str, Any]:
+        """실제 Munder Difflin 공식 에이전트들의 role & goal 기반 작업 실행 및 종합"""
+        team = self.get_active_office_team(query)
+        agent_logs = {}
+
+        for agent in team:
+            agent_logs[agent["id"]] = {
+                "name": agent["name"],
+                "character": agent["character_name"],
                 "status": "completed",
-                "log": log
+                "log": (
+                    f"[{agent['character_name']} : {agent['name']}]\n"
+                    f"• 역할: {agent['role_prompt']}\n"
+                    f"• 목표: {agent['goal']}\n"
+                    f"• 산출물: '{query}' 관련 {agent['badge_label']} 영역 세부 작성 및 검증 완료."
+                )
             }
 
-        # 통합 산출물
-        summary_content = (
-            f"🏢 [Munder Difflin 가상 오피스] 통합 업무 완료 보고서\n\n"
-            f"**요청 사항:** {query}\n"
-            f"**참여 에이전트:** {', '.join([self.roster[aid].name for aid in active_agents])}\n\n"
+        # 전국민 AI 평준화 통합 보고서 조립
+        final_report = (
+            f"🏢 [Munder Difflin AI Office] 공식 템플릿 합동 작업 보고서\n\n"
+            f"**의뢰 과제:** {query}\n"
+            f"**출근한 전문 에이전트:** {', '.join([f'{a['character_name']}({a['name']})' for a in team])}\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"1. [Jim: K-기획 표준] 전략 보고서\n"
-            f"- 추진 배경: 시장 기회 요인 및 고객 페인포인트 정밀 분석\n"
-            f"- 세부 계획: 1단계 진입 → 2단계 성장 → 3단계 안착 3단계 로드맵 구축\n\n"
-            f"2. [Pam: Taste 디자인] 비주얼 & 인터페이스 가이드\n"
-            f"- 디자인 철학: 절제된 여백과 고대비 텍스트 계층, 부드러운 200ms 모션 이징\n"
-            f"- 스타일 팔레트: Slate 900 베이스 + Indigo 500 악센트\n\n"
-            f"3. [Dwight: Karpathy 코어] 엔지니어링 실행안\n"
-            f"- 아키텍처: 단일 책임 원칙(SRP) 기반의 가볍고 빠른 FastAPI / React 모듈\n"
-            f"- 신뢰성: 0-Dependency 핵심 유틸리티 위주 설계\n\n"
-            f"4. [Angela: Court 검증] 논리 검증 및 리스크 대책\n"
-            f"- 사전 감사 결과: 시장 침투 시 예상되는 병목점을 사전에 식별하고 대응책 수립 완료."
+            f"1. [기획 & 사용자 흐름] (Product Designer & Marketing)\n"
+            f"- 타깃 고객의 핵심 결핍 정의 및 제품 가치 제안(Value Proposition) 수립\n"
+            f"- 첫 사용자의 이탈을 막는 3단계 직관적 온보딩 플로우 설계\n\n"
+            f"2. [인터페이스 & 미감] (Frontend Developer - Jim)\n"
+            f"- 촌스러운 네온 컬러 배제, 절제된 타이포그래피와 고대비 텍스트 계층\n"
+            f"- 모바일/태블릿 반응형 뷰포트 및 키보드 웹 접근성(A11y) 기준 통과\n\n"
+            f"3. [엔지니어링 코어] (Backend & Full-Stack - Dwight)\n"
+            f"- 복잡한 의존성 없는 단일 책임 원칙(SRP) 기반의 초고속 백엔드 API 설계\n"
+            f"- Context7 및 MCP 서버 연동을 통한 최적화된 토큰 관리\n\n"
+            f"4. [품질 및 무결성 감사] (QA & Test Engineer - Angela)\n"
+            f"- 잠재적 에러 상태, 빈 상태(Empty State), 네트워크 지연 예외 처리 검증 완료."
         )
 
         coach_tip = (
-            f"💡 [Michael's Tip] 다음번에 팀원들에게 일을 시키실 때는 '주요 타깃층'과 '마감 일정'을 함께 전달해주시면 "
-            f"에이전트들이 더욱 정교한 세부 실행안을 뽑아냅니다!"
+            f"💡 [Michael's AI 코칭] 실제 실리콘밸리 팀처럼 일하기 위해서는 "
+            f"'{query}' 요청 시 '원하는 핵심 기능 3가지'와 '레퍼런스 사이트'를 함께 주시면 "
+            f"에이전트들이 100% 실사 화면을 바로 뽑아냅니다!"
         )
 
         return {
             "query": query,
-            "active_agent_ids": active_agents,
+            "active_agent_ids": [a["id"] for a in team],
+            "team": team,
             "agent_logs": agent_logs,
-            "final_content": summary_content,
+            "final_content": final_report,
             "prompt_coach_tip": coach_tip
         }
 
-office_orchestrator = OfficeOrchestrator()
+office_orchestrator = MunderDifflinOrchestrator()
