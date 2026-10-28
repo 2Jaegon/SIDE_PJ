@@ -20,14 +20,17 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# AI Assistant Workspace (Managed separately in https://github.com/2Jaegon/Gon.git)
-Gon/
-.agents/
-.claude/
-.gemini/
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-skills-lock.json
-install.ps1
-install.sh
+# Gon 에이전트는 이 저장소에 포함한다. 로컬에서 다시 만들 수 있는 것만 제외한다.
+Gon/skills/repos/
+Gon/hive/
+Gon/workspace/munder_extracted/
+.taste-skill/
+
+# .claude는 Gon 진입점만 추적한다 (나머지는 개인 도구 설정·설치물)
+.claude/*
+!.claude/agents/
+.claude/agents/*
+!.claude/agents/gon.md
+!.claude/commands/
+.claude/commands/*
+!.claude/commands/Gon.md
