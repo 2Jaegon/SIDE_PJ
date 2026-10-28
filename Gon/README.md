@@ -7,7 +7,7 @@
 | 경로 | 역할 |
 |---|---|
 | `GON.md` | 프로토콜 (모든 AI가 이 하나를 따름) |
-| `gon.py` | CLI: `route` · `fetch` · `remember` · `log` · `learn` · `install` · `always` · `run` · `doctor` |
+| `gon.py` | CLI: `catalog` · `pick` · `fetch` · `remember` · `log` · `learn` · `install` · `always` · `run` · `doctor` |
 | `registry/skills.json` | 스킬 레지스트리. 용도, 트리거, 시너지, 읽을 파일, 핵심(`core`) 여부 |
 | `memory/` | 장기 메모리(`MEMORY.md`)와 작업 이력(`log.md`) |
 | `prompt/` | 작업용 프롬프트와 최우선 규칙(`outranks everything below.md`) |
@@ -28,8 +28,9 @@ python Gon/gon.py always on    # /Gon 없이 모든 세션에 상시 적용 (해
 
 ## 핵심 스킬
 
-`/Gon` 실행 시 키워드와 무관하게 적용된다 (`registry/skills.json`의 `core`).
-- `always`: karpathy, ECC 검증 루프·코딩 표준
-- `project`: 코드·UI 작업일 때만. ECC FastAPI·React 패턴, API 설계, 접근성, 코드 리뷰, 보안, E2E, git
+스킬은 키워드가 아니라 AI가 요구사항을 분석해 고른다. `gon catalog`로 전체 목록을 보고 필요한 것을 `gon pick`으로 불러온다.
+- `always`(`registry/skills.json`의 `core`): karpathy, ECC 검증 루프·코딩 표준은 고르지 않아도 항상 붙는다.
+- `project`: ECC FastAPI·React 패턴, API 설계, 접근성, 코드 리뷰, 보안, E2E, git은 코드·UI 작업이면 AI가 골라 쓴다.
+- ponytail, graphify, headroom, court 등 나머지도 같은 목록에서 AI가 판단한다.
 
 단독 배포본: https://github.com/2Jaegon/Gon.git

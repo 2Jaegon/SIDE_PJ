@@ -1,7 +1,8 @@
 """
 Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /Gon 등록을 한 파일로.
 
-    python Gon/gon.py route "<요청>"     스킬 체인 선택 (없는 저장소는 자동으로 받음)
+    python Gon/gon.py catalog            스킬 목록(id | 용도). AI가 요구사항을 분석해 여기서 고른다
+    python Gon/gon.py pick <id> [id…]    고른 스킬의 경로 출력 (없는 저장소는 자동으로 받고, 항상 적용 핵심을 덧붙임)
     python Gon/gon.py fetch <id|all>     스킬 저장소 받기 (shallow)
     python Gon/gon.py remember "<사실>"  장기 메모리에 한 줄 추가
     python Gon/gon.py log "<한 줄>"      작업 이력에 한 줄 추가
@@ -15,7 +16,6 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /Gon 등록을 �
 
 import json
 import os
-import re
 import shutil
 import socket
 import subprocess
@@ -83,53 +83,9 @@ def fetch(names: list[str]) -> list[str]:
     return failed
 
 
-# ---------- route ----------
-
-def route(query: str, registry: dict) -> list[dict]:
-    q = query.lower()
-    scored = sorted(
-        ((sum(t.lower() in q for t in s["triggers"]), sid) for sid, s in registry.items() if s["status"] != "external"),
-        key=lambda x: (-x[0], x[1]),
-    )
-    primary = [sid for hits, sid in scored[:3] if hits] or DEFAULT
-
-    chain = list(primary)
-    for sid in primary:
-        for syn in registry[sid]["synergy"]:
-            if len(chain) >= MAX_SKILLS:
-                break
-            # court는 비용이 크므로 요청이 직접 검증을 원할 때만(트리거 매칭) 들어간다
-            if syn in registry and syn not in chain and syn != "court" and registry[syn]["status"] != "external":
-                chain.append(syn)
-    return [registry[i] for i in chain]
-
-
-# 코드·UI 작업으로 보는 단서: 프로젝트 운영 핵심 스킬을 붙일지 정한다.
-# 범용 스킬(ecc 등)이 걸렸다고 코드 작업으로 보지 않는다. 요청 문장과 코드·디자인 전용 스킬만 본다.
-CODE_CLUSTERS = {"design", "motion", "visual"}
-CODE_SKILLS = {"ponytail", "mcp-builder", "context7"}
-CODE_WORDS = ("코드", "개발", "구현", "서버", "백엔드", "프론트", "화면", "버그", "리팩토링", "웹사이트", "앱 ")
-CODE_WORD_RE = re.compile(r"(api|ui|ux|react|fastapi|css|html|bug|refactor|backend|frontend)")
-
-
-def core_skills(chain: list[dict], registry: dict, query: str) -> list[dict]:
-    """키워드와 상관없이 따라붙는 핵심 스킬. always는 항상, project는 코드·UI 작업일 때."""
-    in_chain = {s["id"] for s in chain}
-    q = query.lower()
-    codeish = (
-        any(s["cluster"] in CODE_CLUSTERS or s["id"] in CODE_SKILLS for s in chain)
-        or any(w in q for w in CODE_WORDS)
-        or bool(CODE_WORD_RE.search(q))
-    )
-    out = []
-    for s in registry.values():
-        kind = s.get("core")
-        if s["id"] in in_chain or not kind:
-            continue
-        if kind == "always" or (kind == "project" and codeish):
-            out.append(s)
-    return out
-
+# ---------- catalog / pick ----------
+# 스킬 선택은 키워드 매칭이 아니라 AI(이 프로토콜을 읽는 모델)가 요구사항을 분석해 정한다.
+# catalog는 선택지를 보여 주고, pick은 고른 스킬의 경로를 돌려준다.
 
 def excerpt(path: Path, chars: int = 500) -> str:
     text = path.read_text(encoding="utf-8", errors="replace")
@@ -139,11 +95,25 @@ def excerpt(path: Path, chars: int = 500) -> str:
     return " ".join(text.split())[:chars]
 
 
-def cmd_route(query: str) -> int:
+def cmd_catalog() -> int:
     registry = load()
-    chain = route(query, registry)
-    core = core_skills(chain, registry, query)
-    need = [r for s in chain + core if (r := repo_of(s)) and not (REPOS / r).exists()]
+    tag = {"always": " [항상 적용]", "project": " [코드·UI 작업]"}
+    for s in registry.values():
+        if s["status"] != "external":
+            print(f"{s['id']}{tag.get(s.get('core'), '')} | {s['use_for']}")
+    return 0
+
+
+def cmd_pick(ids: list[str]) -> int:
+    registry = load()
+    unknown = [i for i in ids if i not in registry or registry[i]["status"] == "external"]
+    if unknown:
+        print(f"[gon] 없는 스킬: {unknown} (python Gon/gon.py catalog 로 목록 확인)", file=sys.stderr)
+        return 1
+    # 항상 적용 핵심(ECC 검증·코딩 표준, karpathy)은 고르지 않아도 붙는다
+    chain = [registry[i] for i in dict.fromkeys(ids)]
+    always = [s for s in registry.values() if s.get("core") == "always" and s["id"] not in ids]
+    need = [r for s in chain + always if (r := repo_of(s)) and not (REPOS / r).exists()]
     failed = fetch(list(dict.fromkeys(need)))
 
     def line(s: dict, tag: str) -> str:
@@ -155,10 +125,10 @@ def cmd_route(query: str) -> int:
     # 토큰 절약: 한 스킬당 한 줄. 항상 적용 핵심은 지침 발췌를 바로 붙인다.
     for s in chain:
         print(line(s, ""))
-    for s in core:
-        print(line(s, "[핵심-항상] " if s["core"] == "always" else "[핵심-프로젝트] "))
+    for s in always:
+        print(line(s, "[핵심-항상] "))
         p = entry_path(s)
-        if s["core"] == "always" and p and p.is_file():
+        if p and p.is_file():
             print(f"    > {excerpt(p)}")
     if failed:
         print(f"[gon] fetch 실패: {failed}", file=sys.stderr)
@@ -374,8 +344,10 @@ if __name__ == "__main__":
     sys.stderr.reconfigure(encoding="utf-8")
     a = sys.argv[1:]
     cmd = a[0] if a else "doctor"
-    if cmd == "route" and len(a) > 1:
-        sys.exit(cmd_route(" ".join(a[1:])))
+    if cmd == "catalog":
+        sys.exit(cmd_catalog())
+    if cmd == "pick" and len(a) > 1:
+        sys.exit(cmd_pick([i for x in a[1:] for i in x.replace(",", " ").split()]))
     if cmd == "fetch" and len(a) > 1:
         names = list(json.loads(MANIFEST.read_text(encoding="utf-8"))) if a[1] == "all" else a[1:]
         sys.exit(1 if fetch(names) else 0)
