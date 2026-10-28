@@ -6,3 +6,4 @@
 - [2026-10-28] Munder Difflin 앱은 쓰지 않는다. 상용 앱 복제 대신 직접 만드는 방향.
 - [2026-10-28] Gon 저장소: https://github.com/2Jaegon/Gon.git (SkillBridge 제품 저장소와 분리).
 - [2026-10-29] 프로젝트 전체(에이전트 + 서비스)를 Gon으로 부른다. 저장소를 통째로 내려받아 `/gon`하면 에이전트 적용과 서비스 실행이 되는 것이 목표. 서비스 이름도 Gon.
+- [2026-10-28] GitHub 저장소는 완성 전까지 SIDE_PJ로 두고, 완성되면 Gon으로 이름을 바꾼다(기존 2Jaegon/Gon은 그때 정리). 그 시점에 README의 git clone 주소도 같이 바꾼다.
