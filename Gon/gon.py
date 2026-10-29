@@ -7,6 +7,8 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /gon 등록을 �
     python Gon/gon.py remember "<사실>"  장기 메모리에 한 줄 추가
     python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·미커밋 변경·개발자 코어 스킬을 한 번에 본다
     python Gon/gon.py log --by claude|gemini "<한 줄>"   작업 끝: 이력에 한 줄 추가 (미커밋 변경 파일 자동 첨부)
+    python Gon/gon.py observe --by claude|gemini <스킬id|new:이름> "<한 줄>"   작업 중 본 스킬의 문제를 기록 (2개 쌓이면 점검 안내)
+    python Gon/gon.py review [--done <대상> "<처리 내용>"]   쌓인 관찰을 대상별로 보고 점검 / 처리했다고 닫기
     python Gon/gon.py learn <id> "<용도>" "<트리거,…>"   로컬 스킬 생성·등록
     python Gon/gon.py install [--tools claude,gemini,codex]   어느 프로젝트에서든 /gon 쓰도록 전역 명령 등록. 쓰는 AI만 고른다(안 주면 터미널에서 묻는다)
     python Gon/gon.py always on|off [--tools …]   /gon 없이 모든 세션에 Gon 상시 적용 / 해제 (off는 --tools가 없으면 전부)
@@ -18,6 +20,7 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /gon 등록을 �
 import glob
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -234,6 +237,115 @@ def cmd_recent(n: int = 10) -> int:
     print(f"  [항상 적용]   {', '.join(always_ids)}")
     print(f"  [개발 코어]   {', '.join(dev_ids)}  (착수: graphify·context7 | 워크플로: ecc | 감사·압축: ponytail·headroom). 반론 검증 court는 중요한 결정에만")
     print(f"  [코드·UI 작업] {', '.join(proj_ids)}")
+
+    groups = open_observations()
+    if groups:
+        print("\n## 열린 스킬 관찰 (python Gon/gon.py review)")
+        print("  " + ", ".join(f"{t}({len(r)})" for t, r in groups.items()))
+    return 0
+
+
+# ---------- 스킬 관찰 (skills/local/skill-observer 참고) ----------
+# 작업 중 본 스킬의 문제를 한 줄로 남기고, 같은 대상에 REVIEW_AT개 이상 쌓이면 고칠 때다.
+# 형식: - [날짜 시각] [누가] [대상] [관찰|처리] 내용   (대상: 스킬 id 또는 new:<새 스킬 이름>)
+
+OBSERVATIONS = "observations.md"
+REVIEW_AT = 2
+OBS_LINE = re.compile(r"^- \[(?P<ts>[^\]]+)\] \[(?P<by>[^\]]+)\] \[(?P<target>[^\]]+)\] \[(?P<kind>관찰|처리)\] (?P<text>.*)$")
+
+
+def read_observations() -> list[dict]:
+    f = MEMORY / OBSERVATIONS
+    lines = f.read_text(encoding="utf-8").splitlines() if f.exists() else []
+    return [m.groupdict() for line in lines if (m := OBS_LINE.match(line))]
+
+
+def open_observations() -> dict[str, list[dict]]:
+    """대상별로, 그 대상의 마지막 '처리' 뒤에 쌓인 관찰."""
+    groups: dict[str, list[dict]] = {}
+    for row in read_observations():
+        if row["kind"] == "처리":
+            groups[row["target"]] = []
+        else:
+            groups.setdefault(row["target"], []).append(row)
+    return {t: rows for t, rows in groups.items() if rows}
+
+
+def write_observation(by: str, target: str, kind: str, text: str) -> None:
+    MEMORY.mkdir(exist_ok=True)
+    with (MEMORY / OBSERVATIONS).open("a", encoding="utf-8") as f:
+        f.write(f"- [{date.today()} {time.strftime('%H:%M')}] [{by}] [{target}] [{kind}] {' '.join(text.split())}\n")
+
+
+def split_by(args: list[str]) -> tuple[str, list[str]]:
+    by = os.environ.get("GON_ACTOR", "ai")
+    if len(args) >= 2 and args[0] == "--by":
+        by, args = args[1], args[2:]
+    return by, args
+
+
+def known_target(target: str, registry: dict) -> bool:
+    return target in registry or (target.startswith("new:") and len(target) > 4)
+
+
+def cmd_observe(args: list[str]) -> int:
+    """gon observe [--by claude|gemini] <스킬id|new:이름> "<일반화한 한 줄>" — 작업 중 본 스킬의 문제를 남긴다."""
+    by, args = split_by(args)
+    if len(args) < 2 or args[0] in ("-h", "--help") or not " ".join(args[1:]).strip():
+        print('사용법: gon observe --by claude|gemini <스킬id | new:이름> "<무엇이 어땠고 어떤 규칙이 필요한지 한 줄>"', file=sys.stderr)
+        return 2
+    target, text = args[0], " ".join(args[1:])
+    if not known_target(target, load()):
+        print(f"[gon] 없는 대상: {target} (python Gon/gon.py catalog 의 id, 또는 new:<새 스킬 이름>)", file=sys.stderr)
+        return 1
+    write_observation(by, target, "관찰", text)
+    n = len(open_observations().get(target, []))
+    print(f"기록: {target} (열린 관찰 {n}개)")
+    if n >= REVIEW_AT:
+        print(f"! {target}에 관찰이 {n}개 쌓였다. `python Gon/gon.py review`로 점검한다. "
+              "같은 규칙이 또 어겨진 것이라면 문구를 키우지 말고 구조적 장치(검증 단계, 체크리스트)로 바꾼다.")
+    return 0
+
+
+def cmd_review(args: list[str]) -> int:
+    """gon review — 열린 관찰을 대상별로 보여 준다. gon review --done <대상> "<처리 내용>" — 처리했다고 닫는다."""
+    if args and args[0] == "--done":
+        by, rest = split_by(args[1:])
+        if len(rest) < 2 or not " ".join(rest[1:]).strip():
+            print('사용법: gon review --done [--by …] <대상> "<무엇을 고쳤거나 왜 버렸는지>"', file=sys.stderr)
+            return 2
+        target = rest[0]
+        if target not in open_observations():
+            print(f"[gon] 열린 관찰이 없는 대상: {target}", file=sys.stderr)
+            return 1
+        write_observation(by, target, "처리", " ".join(rest[1:]))
+        print(f"닫음: {target}")
+        return 0
+    groups = open_observations()
+    if not groups:
+        print("열린 관찰이 없다.")
+        return 0
+    registry = load()
+
+    def show(target: str, rows: list[dict]) -> None:
+        s = registry.get(target)
+        where = f" | 용도: {s['use_for']} | 파일: {entry_path(s) or '(외부 도구)'}" if s else " | 새 스킬 후보"
+        print(f"### {target} ({len(rows)}개){where}")
+        for r in rows:
+            print(f"  - [{r['ts']}] [{r['by']}] {r['text']}")
+
+    ready = {t: r for t, r in groups.items() if len(r) >= REVIEW_AT}
+    later = {t: r for t, r in groups.items() if len(r) < REVIEW_AT}
+    if ready:
+        print(f"## 고칠 후보 (관찰 {REVIEW_AT}개 이상)")
+        for t, rows in ready.items():
+            show(t, rows)
+    if later:
+        print("\n## 더 지켜볼 것")
+        for t, rows in later.items():
+            show(t, rows)
+    print("\n절차: 본문을 읽고 분류 → 개수와 함께 사용자에게 보이고 승인 → 로컬 스킬은 SKILL.md·use_for 수정, 외부 저장소 스킬은 레지스트리 guard·use_for에 메모 "
+          "→ `python Gon/gon.py review --done <대상> \"<무엇을 했나>\"`  (자세한 기준: skills/local/skill-observer/SKILL.md)")
     return 0
 
 
@@ -556,6 +668,10 @@ if __name__ == "__main__":
         sys.exit(cmd_log(a[1:]))
     if cmd == "recent":
         sys.exit(cmd_recent(int(a[1]) if len(a) > 1 and a[1].isdigit() else 10))
+    if cmd == "observe":
+        sys.exit(cmd_observe(a[1:]))
+    if cmd == "review":
+        sys.exit(cmd_review(a[1:]))
     if cmd == "learn" and len(a) == 4:
         sys.exit(cmd_learn(*a[1:]))
     if cmd == "install":

@@ -37,7 +37,7 @@ NAMES = {
     "freellmapi": "LLM 비용 설계자",
     "ecc-verification": "검증 루프 담당", "ecc-coding-standards": "코딩 표준 담당", "ecc-fastapi": "FastAPI 설계자",
     "ecc-react": "React 설계자", "ecc-a11y": "접근성 담당", "ecc-api-design": "API 설계자",
-    "ecc-code-review": "코드 리뷰어", "ecc-security-review": "보안 리뷰어", "ecc-e2e": "E2E 테스트 담당", "ecc-git": "형상 관리 담당",
+    "ecc-code-review": "코드 리뷰어", "ecc-security-review": "보안 리뷰어", "ecc-e2e": "E2E 테스트 담당", "ecc-git": "형상 관리 담당", "skill-observer": "스킬 개선 관찰자",
     "agency-agents": "직무 페르소나 전문가",
 }
 PROMPT_EXPERTS = {

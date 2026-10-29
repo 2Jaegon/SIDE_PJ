@@ -101,3 +101,71 @@ def test_doctor_flags_unchosen_tool_with_gon_block(sandbox, capsys):
     gon.cmd_doctor()
     out = capsys.readouterr().out
     assert "고르지 않은 codex" in out and "always off --tools codex" in out
+
+
+# ---------- 스킬 관찰 ----------
+
+def test_observe_records_and_counts_open_observations(sandbox, capsys):
+    assert gon.cmd_observe(["--by", "claude", "k-skill", "지원사업 양식을", "못 찾았다"]) == 0
+    assert "열린 관찰 1개" in capsys.readouterr().out
+    line = (gon.MEMORY / "observations.md").read_text(encoding="utf-8").splitlines()[0]
+    assert "[claude] [k-skill] [관찰] 지원사업 양식을 못 찾았다" in line
+
+
+def test_observe_rejects_unknown_target_and_empty_text(sandbox, capsys):
+    assert gon.cmd_observe(["--by", "claude", "no-such-skill", "x"]) == 1
+    assert "없는 대상" in capsys.readouterr().err
+    assert gon.cmd_observe(["k-skill"]) == 2
+    assert gon.cmd_observe(["k-skill", "   "]) == 2
+    assert not (gon.MEMORY / "observations.md").exists()
+
+
+def test_observe_accepts_new_skill_proposal(sandbox):
+    assert gon.cmd_observe(["--by", "gemini", "new:release-notes", "릴리스 노트를 같은 순서로 세 번 썼다"]) == 0
+    assert "new:release-notes" in gon.open_observations()
+    assert gon.cmd_observe(["new:", "x"]) == 1  # 이름 없는 제안은 거절
+
+
+def test_observe_collapses_newlines_into_one_record(sandbox):
+    gon.cmd_observe(["--by", "claude", "k-skill", "첫 줄\n둘째 줄 [대괄호] 포함"])
+    rows = gon.read_observations()
+    assert len(rows) == 1 and rows[0]["text"] == "첫 줄 둘째 줄 [대괄호] 포함"
+
+
+def test_second_observation_prompts_review(sandbox, capsys):
+    gon.cmd_observe(["--by", "claude", "k-skill", "첫 번째"])
+    capsys.readouterr()
+    gon.cmd_observe(["--by", "gemini", "k-skill", "두 번째"])
+    out = capsys.readouterr().out
+    assert "열린 관찰 2개" in out and "review" in out and "구조적 장치" in out
+
+
+def test_review_lists_ready_targets_first_and_done_closes_them(sandbox, capsys):
+    gon.cmd_observe(["--by", "claude", "taste", "하나"])
+    gon.cmd_observe(["--by", "claude", "k-skill", "가"])
+    gon.cmd_observe(["--by", "gemini", "k-skill", "나"])
+    capsys.readouterr()
+    assert gon.cmd_review([]) == 0
+    out = capsys.readouterr().out
+    assert out.index("고칠 후보") < out.index("### k-skill") < out.index("더 지켜볼 것") < out.index("### taste")
+
+    assert gon.cmd_review(["--done", "--by", "claude", "k-skill", "use_for를 고쳤다"]) == 0
+    assert "k-skill" not in gon.open_observations()
+    assert "taste" in gon.open_observations()  # 다른 대상은 그대로
+    assert gon.cmd_review(["--done", "k-skill", "again"]) == 1  # 이미 닫힌 대상
+
+
+def test_observation_after_done_starts_a_new_count(sandbox, capsys):
+    gon.cmd_observe(["--by", "claude", "k-skill", "가"])
+    gon.cmd_observe(["--by", "claude", "k-skill", "나"])
+    gon.cmd_review(["--done", "k-skill", "고침"])
+    capsys.readouterr()
+    gon.cmd_observe(["--by", "claude", "k-skill", "다"])
+    assert "열린 관찰 1개" in capsys.readouterr().out
+
+
+def test_recent_shows_open_observations(sandbox, capsys):
+    gon.cmd_observe(["--by", "claude", "k-skill", "가"])
+    capsys.readouterr()
+    gon.cmd_recent(1)
+    assert "열린 스킬 관찰" in capsys.readouterr().out

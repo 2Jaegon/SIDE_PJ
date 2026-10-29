@@ -792,6 +792,24 @@
     "im-not-ai"
    ],
    "guard": "약 325개 파일 — 폴더(marketing, design, product, sales …)를 grep해 직무 파일 1~2개만 연다. 영어 원문이라 산출물은 한국어로 쓴다"
+  },
+  {
+   "id": "skill-observer",
+   "cluster": "meta",
+   "status": "local",
+   "entry": "Gon/skills/local/skill-observer/SKILL.md",
+   "use_for": "스킬이 틀렸거나 선택이 어긋난 신호(사용자 교정, 지침 위반, 낡은 지침, 반복되는 작업)를 기록하고 모아, 스킬 지침을 고치거나 새 스킬을 제안할 때",
+   "triggers": [
+    "스킬 개선",
+    "스킬 점검",
+    "관찰",
+    "교정 기록",
+    "gon observe",
+    "gon review"
+   ],
+   "synergy": [
+    "ecc-code-review"
+   ]
   }
  ]
 }

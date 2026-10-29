@@ -7,7 +7,7 @@
 | 경로 | 역할 |
 |---|---|
 | `GON.md` | 프로토콜 (모든 AI가 이 하나를 따름) |
-| `gon.py` | CLI: `catalog` · `pick` · `fetch` · `remember` · `recent` · `log` · `learn` · `install` · `always` · `run` · `doctor` |
+| `gon.py` | CLI: `catalog` · `pick` · `fetch` · `remember` · `recent` · `log` · `observe` · `review` · `learn` · `install` · `always` · `run` · `doctor` |
 | `registry/skills.json` | 스킬 레지스트리. 용도, 트리거, 시너지, 읽을 파일, 핵심(`core`) 여부 |
 | `memory/` | 장기 메모리(`MEMORY.md`)와 작업 이력(`log.md`) |
 | `prompt/` | 작업용 프롬프트와 최우선 규칙(`outranks everything below.md`) |
@@ -19,11 +19,11 @@
 
 저장소 루트의 [README.md](../README.md)를 따른다. 요약하면 clone 후 AI 도구에서 `/Gon`, 그다음 `python Gon/gon.py run`.
 
-다른 프로젝트에서도 `/Gon`을 쓰려면:
+다른 프로젝트에서도 `/gon`을 쓰려면(쓰는 AI만 고른다. 안 주면 터미널에서 묻는다):
 
 ```
-python Gon/gon.py install      # ~/.claude, ~/.gemini 에 전역 /Gon 등록
-python Gon/gon.py always on    # /Gon 없이 모든 세션에 상시 적용 (해제: off)
+python Gon/gon.py install --tools claude,gemini   # 고른 AI에 전역 /gon 등록 (선택 가능: claude, gemini, codex)
+python Gon/gon.py always on                        # /gon 없이 모든 세션에 상시 적용 (해제: always off [--tools …])
 ```
 
 ## 핵심 스킬
