@@ -26,6 +26,8 @@ Gon/hive/
 Gon/roster.json
 Gon/roster-backups/
 Gon/tools.local.json
+# npx skills CLI가 만드는 이 PC의 설치 기록
+skills-lock.json
 Gon/workspace/munder_extracted/
 .taste-skill/
 
