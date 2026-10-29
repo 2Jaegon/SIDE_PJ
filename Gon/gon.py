@@ -8,8 +8,8 @@ Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /gon 등록을 �
     python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·미커밋 변경·개발자 코어 스킬을 한 번에 본다
     python Gon/gon.py log --by claude|gemini "<한 줄>"   작업 끝: 이력에 한 줄 추가 (미커밋 변경 파일 자동 첨부)
     python Gon/gon.py learn <id> "<용도>" "<트리거,…>"   로컬 스킬 생성·등록
-    python Gon/gon.py install            어느 프로젝트에서든 /gon 쓰도록 전역 명령 등록 (Claude, Gemini, Codex)
-    python Gon/gon.py always on|off      /gon 없이 모든 세션에 Gon 상시 적용 / 해제 (Claude, Gemini, Codex)
+    python Gon/gon.py install [--tools claude,gemini,codex]   어느 프로젝트에서든 /gon 쓰도록 전역 명령 등록. 쓰는 AI만 고른다(안 주면 터미널에서 묻는다)
+    python Gon/gon.py always on|off [--tools …]   /gon 없이 모든 세션에 Gon 상시 적용 / 해제 (off는 --tools가 없으면 전부)
     python Gon/gon.py doctor             설치 상태 점검
     python Gon/gon.py run                서비스 준비(의존성 설치) + 백엔드·프론트 서버 실행
     python Gon/gon.py stop               실행 중인 서비스 종료
@@ -274,23 +274,94 @@ def command_body(arg: str) -> str:
     )
 
 
-def cmd_install() -> int:
+# Gon을 적용할 수 있는 AI 도구. 쓰지 않는 도구의 전역 설정은 건드리지 않도록 사용자가 고른 것만 적용한다.
+# commands는 /gon 명령 파일(대소문자 둘 다), always는 모든 세션에 Gon을 켜는 전역 지침 파일이다.
+TOOLS = {
+    "claude": {"label": "Claude Code", "kind": "md", "always": ".claude/CLAUDE.md",
+               "commands": (".claude/commands/gon.md", ".claude/commands/Gon.md")},
+    "gemini": {"label": "Gemini CLI·Antigravity", "kind": "toml", "always": ".gemini/GEMINI.md",
+               "commands": (".gemini/commands/gon.toml", ".gemini/commands/Gon.toml")},
+    "codex": {"label": "Codex CLI", "kind": "md", "always": ".codex/AGENTS.md",
+              "commands": (".codex/prompts/gon.md", ".codex/prompts/Gon.md")},
+}
+CHOICE = GON / "tools.local.json"  # 이 PC에서 고른 AI 도구 (커밋하지 않는다)
+
+
+def detected_tools() -> list[str]:
+    found = []
+    for name in TOOLS:
+        if find_tool(name) or (name == "gemini" and (find_tool("agy") or (Path.home() / ".gemini").exists())):
+            found.append(name)
+    return found
+
+
+def load_choice() -> list[str] | None:
+    try:
+        names = json.loads(CHOICE.read_text(encoding="utf-8"))["tools"]
+    except (OSError, ValueError, KeyError):
+        return None
+    return [n for n in names if n in TOOLS] or None
+
+
+def parse_tools(args: list[str]) -> tuple[list[str] | None, bool]:
+    """--tools claude,gemini 또는 환경변수 GON_TOOLS. (이름 목록 또는 None, 이름이 올바른가)"""
+    raw = None
+    if "--tools" in args and args.index("--tools") + 1 < len(args):
+        raw = args[args.index("--tools") + 1]
+    raw = raw or os.environ.get("GON_TOOLS")
+    if not raw:
+        return None, True
+    names = [n.strip().lower() for n in raw.replace(" ", ",").split(",") if n.strip()]
+    bad = [n for n in names if n not in TOOLS]
+    if bad or not names:
+        print(f"[gon] 알 수 없는 AI: {bad or raw} (선택 가능: {', '.join(TOOLS)})", file=sys.stderr)
+        return None, False
+    return list(dict.fromkeys(names)), True
+
+
+def choose_tools(args: list[str]) -> list[str] | None:
+    """Gon을 적용할 AI 도구를 정한다: 명령줄·환경변수 > 저장된 선택 > 터미널이면 질문. 정하지 못하면 None."""
+    names, ok = parse_tools(args)
+    if not ok:
+        return None
+    if names is None:
+        names = load_choice()
+    if names is None:
+        found = detected_tools()
+        if not sys.stdin.isatty():
+            options = ", ".join(k + "(" + v["label"] + ")" for k, v in TOOLS.items())
+            print("[gon] Gon을 적용할 AI를 아직 정하지 않았다. 사용자에게 어떤 AI를 쓰는지 물은 뒤 실행해라:\n"
+                  f"  python Gon/gon.py install --tools {','.join(found[:2]) or 'claude'}\n"
+                  f"  선택 가능: {options} | 이 PC에서 감지됨: {', '.join(found) or '없음'}",
+                  file=sys.stderr)
+            return None
+        print("Gon을 적용할 AI를 고르세요. 고른 도구의 전역 설정만 바꿉니다.")
+        for k, v in TOOLS.items():
+            print(f"  {k:7} {v['label']}{'  (감지됨)' if k in found else ''}")
+        try:
+            answer = input(f"쉼표로 입력 (예: claude,gemini) [Enter = 감지된 것 전체: {', '.join(found) or '없음'}]: ").strip()
+        except EOFError:
+            answer = ""
+        names, ok = parse_tools(["--tools", answer]) if answer else (found, True)
+        if not ok or not names:
+            return None
+    CHOICE.write_text(json.dumps({"tools": names}, ensure_ascii=False) + "\n", encoding="utf-8")
+    return names
+
+
+def cmd_install(args: list[str] | None = None) -> int:
+    tools = choose_tools(args or [])
+    if tools is None:
+        return 2
     md_content = "---\ndescription: Gon 에이전트로 요청을 수행한다\nargument-hint: [요청]\n---\n\n" + command_body("$ARGUMENTS")
     toml_content = 'description = "Gon 에이전트로 요청을 수행한다"\nprompt = """\n' + command_body("{{args}}") + '"""\n'
-
-    # 대소문자(/gon, /Gon) 및 3대 CLI(Claude, Gemini, Codex) 동시 등록
-    targets = {
-        Path.home() / ".claude" / "commands" / "gon.md": md_content,
-        Path.home() / ".claude" / "commands" / "Gon.md": md_content,
-        Path.home() / ".gemini" / "commands" / "gon.toml": toml_content,
-        Path.home() / ".gemini" / "commands" / "Gon.toml": toml_content,
-        Path.home() / ".codex" / "prompts" / "gon.md": md_content,
-        Path.home() / ".codex" / "prompts" / "Gon.md": md_content,
-    }
-    for path, body in targets.items():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body, encoding="utf-8")
-        print(f"등록: {path}")
+    for name in tools:
+        body = toml_content if TOOLS[name]["kind"] == "toml" else md_content
+        for rel in TOOLS[name]["commands"]:
+            path = Path.home() / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body, encoding="utf-8")
+            print(f"등록: {path}")
     return cmd_doctor()
 
 
@@ -395,28 +466,45 @@ def cmd_stop() -> int:
     return 0
 
 
-ALWAYS_FILES = (
-    Path.home() / ".claude" / "CLAUDE.md",
-    Path.home() / ".gemini" / "GEMINI.md",
-    Path.home() / ".codex" / "AGENTS.md",
-)
 BEGIN, END = "<!-- gon:begin -->", "<!-- gon:end -->"
 
 
-def cmd_always(on: bool) -> int:
-    """전역 지침 파일에 Gon 블록을 넣거나 뺀다. 블록 밖의 사용자 내용은 건드리지 않는다."""
+def always_file(name: str) -> Path:
+    return Path.home() / TOOLS[name]["always"]
+
+
+def cmd_always(on: bool, args: list[str] | None = None) -> int:
+    """전역 지침 파일에 Gon 블록을 넣거나 뺀다. 블록 밖의 사용자 내용은 건드리지 않는다.
+
+    켤 때는 고른 AI의 파일만 바꾼다. 끌 때는 --tools가 없으면 모든 AI에서 Gon 블록을 걷어낸다.
+    """
+    args = args or []
+    if on:
+        tools = choose_tools(args)
+    else:
+        tools, ok = parse_tools(args)
+        tools = list(TOOLS) if ok and tools is None else tools
+    if tools is None:
+        return 2
     block = (
         f"{BEGIN}\n# Gon (항상 적용)\n"
         "모든 세션에서 너는 비서 에이전트 Gon이다. 아래 프로토콜을 따른다. "
         "현재 프로젝트의 지침과 충돌하면 프로젝트 지침이 우선한다.\n\n"
         f"@{(GON / 'GON.md').as_posix()}\n{END}\n"
     )
-    for path in ALWAYS_FILES:
+    for name in tools:
+        path = always_file(name)
         text = path.read_text(encoding="utf-8") if path.exists() else ""
+        if not on and BEGIN not in text:
+            continue
         if BEGIN in text:
             text = text[: text.index(BEGIN)] + text[text.index(END) + len(END):].lstrip("\n")
         if on:
             text = (text.rstrip() + "\n\n" if text.strip() else "") + block
+        if not on and not text.strip():  # Gon 블록만 있던 파일은 지운다
+            path.unlink()
+            print(f"해제: {path} (비어서 삭제)")
+            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
         print(f"{'적용' if on else '해제'}: {path}")
@@ -435,16 +523,18 @@ def cmd_doctor() -> int:
     up = port_busy(BACKEND_PORT) and port_busy(FRONTEND_PORT)
     print(f"서비스: {'실행 중 http://localhost:' + str(FRONTEND_PORT) if up else '꺼짐 (python Gon/gon.py run)'}")
     print("도구: " + ", ".join(f"{t}={'O' if ok else 'X'}" for t, ok in tools.items()))
-    cmd_paths = (
-        Path.home() / ".claude/commands/gon.md",
-        Path.home() / ".gemini/commands/gon.toml",
-        Path.home() / ".codex/prompts/gon.md",
-    )
-    for p in cmd_paths:
-        print(f"전역 /gon: {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
-    for p in ALWAYS_FILES:
-        on = p.exists() and BEGIN in p.read_text(encoding="utf-8")
-        print(f"상시 적용: {p} {'O' if on else 'X (python Gon/gon.py always on)'}")
+    chosen = load_choice()
+    print(f"적용할 AI: {', '.join(chosen) if chosen else '아직 안 정함 (python Gon/gon.py install)'}")
+    for name in chosen or []:
+        p = Path.home() / TOOLS[name]["commands"][0]
+        print(f"전역 /gon ({name}): {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
+        a = always_file(name)
+        on = a.exists() and BEGIN in a.read_text(encoding="utf-8")
+        print(f"상시 적용 ({name}): {a} {'O' if on else 'X (python Gon/gon.py always on)'}")
+    for name in TOOLS:
+        a = always_file(name)
+        if name not in (chosen or []) and a.exists() and BEGIN in a.read_text(encoding="utf-8"):
+            print(f"! 고르지 않은 {name}에 Gon이 상시 적용돼 있다: python Gon/gon.py always off --tools {name}")
     return 1 if broken else 0
 
 
@@ -469,9 +559,9 @@ if __name__ == "__main__":
     if cmd == "learn" and len(a) == 4:
         sys.exit(cmd_learn(*a[1:]))
     if cmd == "install":
-        sys.exit(cmd_install())
-    if cmd == "always" and len(a) == 2 and a[1] in ("on", "off"):
-        sys.exit(cmd_always(a[1] == "on"))
+        sys.exit(cmd_install(a[1:]))
+    if cmd == "always" and len(a) >= 2 and a[1] in ("on", "off"):
+        sys.exit(cmd_always(a[1] == "on", a[2:]))
     if cmd == "stop":
         sys.exit(cmd_stop())
     if cmd == "run":

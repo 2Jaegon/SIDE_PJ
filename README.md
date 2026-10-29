@@ -11,7 +11,16 @@ git clone https://github.com/2Jaegon/SIDE_PJ.git
 cd SIDE_PJ
 ```
 
-AI 도구(Claude Code, Gemini CLI, Antigravity)를 이 폴더에서 열고 입력한다.
+처음 한 번, 쓰는 AI에 Gon을 등록한다. 쓰는 AI(Claude Code, Gemini CLI·Antigravity, Codex CLI)를 물어보고, 고른 도구의 전역 설정만 바꾼다.
+
+```
+./install.sh        # macOS·Linux·WSL
+.\install.ps1       # Windows PowerShell
+```
+
+미리 정하려면 `./install.sh --tools claude,gemini`처럼 쓴다. 나중에 바꾸거나 빼려면 `python Gon/gon.py install --tools …`, `python Gon/gon.py always off --tools codex`.
+
+그다음 AI 도구를 이 폴더에서 열고 입력한다.
 
 ```
 /gon
