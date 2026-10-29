@@ -155,3 +155,30 @@ def test_run_with_only_invalid_selected_expert_ids():
     assert any(e["type"] == "plan" for e in events)
     assert any(e["type"] == "final" for e in events)
 
+
+
+def test_parse_plan_keeps_terms_string_and_list(mock_pool):
+    text = json.dumps({
+        "reason": "r",
+        "experts": [
+            {"id": "k-skill", "task": "t", "terms": "sales proposal"},
+            {"id": "taste", "task": "t", "terms": ["instagram", "content"]},
+            {"id": "karpathy", "task": "t"},
+        ],
+    })
+    res = pipeline._parse_plan(text, mock_pool)
+    assert [x["terms"] for x in res["experts"]] == ["sales proposal", "instagram content", ""]
+
+
+def test_plan_prompt_asks_for_terms_of_multi_skill_experts(mock_pool):
+    prompt = pipeline._plan_prompt("요청", mock_pool)
+    line = next(ln for ln in prompt.splitlines() if '"terms"에' in ln)
+    assert "k-skill" in line  # 하위 스킬이 많은 전문가 id를 안내한다
+    assert "taste" not in line
+
+
+def test_expert_prompt_keeps_plain_text_and_no_tool_rules():
+    e = {"id": "karpathy", "name": "N", "use_for": "U", "guard": "", "entry": None}
+    prompt = pipeline._expert_prompt(e, "과업", "요청")
+    assert "마크다운 기호" in prompt and "평문" in prompt
+    assert "명령도 실행하지" in prompt
