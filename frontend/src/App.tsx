@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus } from 'lucide-react';
 import { OfficeFloor, DeskData } from './components/OfficeFloor';
 import { AgentTerminalModal } from './components/AgentTerminalModal';
 import { ChatThread, Composer } from './components/ChatPanel';
 import { RosterDrawer, ExpertItem } from './components/RosterDrawer';
-import { Mark } from './components/Mark';
+import { Sidebar } from './components/Sidebar';
+import { GonPanel } from './components/GonPanel';
 import { FeedItem } from './components/ActivityFeed';
 import { PoolSummary, StreamEvent, Result, Turn, toDesk } from './types';
 import type { Phase } from './components/Orb';
@@ -30,11 +30,14 @@ export function App() {
   const [phase, setPhase] = useState<Phase>('connect');
   const [teamSize, setTeamSize] = useState(0);
   const [doneCount, setDoneCount] = useState(0);
+  const [planReason, setPlanReason] = useState('');
+  const [collapsed, setCollapsed] = useState(false);
 
   const [isRosterOpen, setIsRosterOpen] = useState(false);
   const [targetSlotIndex, setTargetSlotIndex] = useState<number | null>(null);
   const [customTeam, setCustomTeam] = useState<ExpertItem[]>([]);
 
+  const gonRef = useRef<HTMLDivElement>(null);
   const runId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const tabRef = useRef(tab);
@@ -84,6 +87,7 @@ export function App() {
     setPhase('connect');
     setTeamSize(0);
     setDoneCount(0);
+    setPlanReason('');
     setTab('office');
 
     const say = (d: DeskData, text: string, key: string) =>
@@ -118,6 +122,7 @@ export function App() {
           setActiveAgentIds(team.map((t) => t.id));
           setPhase('work');
           setTeamSize(team.length);
+          setPlanReason(ev.reason);
           say(lead, `${team.length}명을 책상에 앉혔어요${ev.reason ? `. ${ev.reason}` : ''}`, 'plan');
           team.forEach((t) => say(t, `맡은 일: ${t.name}`, 'task'));
           return null;
@@ -215,6 +220,14 @@ export function App() {
     setWorkingAgentIds([]);
     setDraft('');
     setUnread(false);
+    setPlanReason('');
+  };
+
+  // 사이드바에서 요청을 누르면 그 요청이 있는 대화 위치로 간다
+  const jumpToTurn = (id: number) => {
+    setTab('chat');
+    setUnread(false);
+    requestAnimationFrame(() => document.getElementById(`turn-${id}`)?.scrollIntoView({ block: 'start' }));
   };
 
   const openRoster = (slot: number | null) => {
@@ -225,6 +238,8 @@ export function App() {
   const selectedAgent = desks.find((d) => d.id === selectedAgentId) || null;
   const last = turns[turns.length - 1];
   const planning = isLoading && desks.length <= 1;
+  const delivered = !!last?.result;
+  const stopped = !!last && last.done && !last.result;
 
   const tabBtn = (id: 'office' | 'chat', label: string) => (
     <button
@@ -245,76 +260,82 @@ export function App() {
   );
 
   return (
-    <div className="h-dvh flex flex-col bg-ground text-ink font-sans">
-      <header className="shrink-0 h-12 px-4 flex items-center justify-between bg-surface border-b border-line">
-        <div className="flex items-center gap-2.5">
-          <Mark size={24} />
-          <h1 className="font-bold tracking-tight">Gon</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          {pool?.mode === 'stub' && <span className="text-sm text-faint">AI 미연결</span>}
-          {turns.length > 0 && (
-            <button
-              type="button"
-              onClick={reset}
-              className="h-8 px-2.5 rounded border border-line bg-surface text-sm text-ink hover:border-faint inline-flex items-center gap-1.5 transition-colors duration-200 ease-out"
-            >
-              <Plus className="w-4 h-4" aria-hidden />
-              새 대화
-            </button>
-          )}
-        </div>
-      </header>
+    <div className="h-dvh flex flex-col lg:flex-row lg:gap-3 lg:p-3 bg-ground text-ink font-sans">
+      <Sidebar
+        turns={turns}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
+        onNew={reset}
+        onJump={jumpToTurn}
+        pool={pool}
+      />
 
-      <div role="tablist" className="lg:hidden shrink-0 flex bg-surface border-b border-line">
-        {tabBtn('office', '사무실')}
-        {tabBtn('chat', '대화')}
-      </div>
-
-      <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_440px] xl:grid-cols-[minmax(0,1fr)_480px] lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]">
-        <div className={`${tab === 'office' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-w-0 min-h-0 lg:col-start-1 lg:row-span-2`}>
-          <OfficeFloor
-            desks={desks}
-            activeAgentIds={activeAgentIds}
-            failedAgentIds={failedAgentIds}
-            workingAgentIds={workingAgentIds}
-            finished={!!last?.result}
-            planning={planning}
-            selectedAgentId={selectedAgentId}
-            onSelectAgent={setSelectedAgentId}
-            onOpenRosterSlot={openRoster}
-          />
-        </div>
-
-        {/* 추후 다른 요소를 넣을 자리 */}
-        <div aria-hidden className="hidden lg:block lg:col-start-2 lg:row-start-1 min-h-0 border-l border-line bg-surface" />
-
-        <div
-          className={`${tab === 'chat' ? 'flex-1' : 'shrink-0'} lg:flex-1 flex flex-col min-h-0 lg:col-start-2 lg:row-start-2 lg:border-l lg:border-t border-line`}
-        >
-          <section aria-label="대화" className={`${tab === 'chat' ? 'block' : 'hidden'} lg:block flex-1 min-h-0`}>
-            <ChatThread
-              turns={turns}
-              progress={isLoading ? { phase, total: teamSize, done: doneCount } : null}
-              onToggleCard={(id) => setTurns((ts) => ts.map((t) => (t.id === id ? { ...t, card: !t.card } : t)))}
-            />
-          </section>
-          <div className="shrink-0">
-            <Composer
-              isLoading={isLoading}
-              draft={draft}
-              onDraft={setDraft}
-              onSend={handleDispatch}
-              onStop={stop}
-              customTeam={customTeam}
-              onOpenRoster={() => openRoster(null)}
-              onRemoveMember={(id) => setCustomTeam((prev) => prev.filter((x) => x.id !== id))}
-              onClearTeam={() => setCustomTeam([])}
-              poolTotal={pool?.total}
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+        {/* 데스크톱: 위는 사무실, 아래는 대화(왼쪽)와 총괄 자리(오른쪽) */}
+        <main className="flex-1 min-h-0 flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_232px] lg:grid-rows-[minmax(0,1fr)_clamp(300px,34vh,400px)] lg:gap-3">
+          <div role="tablist" className="lg:hidden shrink-0 flex bg-surface border-b border-line">
+            {tabBtn('office', '사무실')}
+            {tabBtn('chat', '대화')}
+          </div>
+          <div
+            className={`${tab === 'office' ? 'flex' : 'hidden'} lg:flex flex-col flex-1 min-w-0 min-h-0 lg:col-span-2 lg:row-start-1 lg:rounded-lg lg:border lg:border-line lg:bg-surface lg:overflow-hidden`}
+          >
+            <OfficeFloor
+              desks={desks}
+              activeAgentIds={activeAgentIds}
+              failedAgentIds={failedAgentIds}
+              workingAgentIds={workingAgentIds}
+              finished={delivered}
+              planning={planning}
+              selectedAgentId={selectedAgentId}
+              onSelectAgent={setSelectedAgentId}
+              onOpenRosterSlot={openRoster}
+              homeRef={gonRef}
             />
           </div>
-        </div>
-      </main>
+
+          <div
+            className={`${tab === 'chat' ? 'flex-1' : 'shrink-0'} order-3 lg:order-none lg:flex-1 flex flex-col min-w-0 min-h-0 lg:col-start-1 lg:row-start-2 lg:rounded-lg lg:border lg:border-line lg:bg-surface lg:overflow-hidden`}
+          >
+            <section aria-label="대화" className={`${tab === 'chat' ? 'block' : 'hidden'} lg:block flex-1 min-h-0`}>
+              <ChatThread
+                turns={turns}
+                onToggleCard={(id) => setTurns((ts) => ts.map((t) => (t.id === id ? { ...t, card: !t.card } : t)))}
+              />
+            </section>
+            <div className="shrink-0">
+              <Composer
+                isLoading={isLoading}
+                draft={draft}
+                onDraft={setDraft}
+                onSend={handleDispatch}
+                onStop={stop}
+                customTeam={customTeam}
+                onRemoveMember={(id) => setCustomTeam((prev) => prev.filter((x) => x.id !== id))}
+                onClearTeam={() => setCustomTeam([])}
+              />
+            </div>
+          </div>
+
+          {/* 총괄 자리: 사무실 바닥 아래쪽에 위로 겹쳐 붙어서, 사무실과 이어진 한 공간으로 보인다(데스크톱) */}
+          <div
+            ref={gonRef}
+            className={`${tab === 'office' ? 'block' : 'hidden'} lg:block order-2 lg:order-none shrink-0 relative z-20 lg:col-start-2 lg:row-start-2 lg:-mt-[45px]`}
+          >
+            <GonPanel
+              desks={desks}
+              workingAgentIds={workingAgentIds}
+              failedAgentIds={failedAgentIds}
+              activeAgentIds={activeAgentIds}
+              isLoading={isLoading}
+              finished={delivered}
+              stopped={stopped}
+              progress={{ phase, total: teamSize, done: doneCount }}
+              planReason={planReason}
+            />
+          </div>
+        </main>
+      </div>
 
       <RosterDrawer
         isOpen={isRosterOpen}

@@ -8,7 +8,7 @@ export interface Spot {
   y: number;
 }
 
-const WALK_MS = 1000;
+export const WALK_MS = 1000;
 
 export const spotStyle = (s: Spot) => ({ left: `calc(${s.xPct}% + ${s.dx}px)`, top: `${s.y}px` });
 

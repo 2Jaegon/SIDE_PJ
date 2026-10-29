@@ -1,11 +1,10 @@
 import React, { useEffect, useRef } from 'react';
-import { ArrowUp, Square, Users, X, AlertCircle } from 'lucide-react';
+import { ArrowUp, Square, X, AlertCircle } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
 import { ExportActionBar } from './ExportActionBar';
 import { PromptRecipeCard } from './PromptRecipeCard';
 import { Avatar } from './Avatar';
 import { Mark } from './Mark';
-import { Orb, LiveProgress } from './Orb';
 import type { ExpertItem } from './RosterDrawer';
 import { Turn, toDesk } from '../types';
 
@@ -17,18 +16,16 @@ interface ChatPanelProps {
   onSend: () => void;
   onStop: () => void;
   customTeam: ExpertItem[];
-  onOpenRoster: () => void;
   onRemoveMember: (id: string) => void;
   onClearTeam: () => void;
-  poolTotal?: number;
   onToggleCard: (turnId: number) => void;
 }
 
-const TurnView: React.FC<{ turn: Turn; progress: LiveProgress | null; onToggleCard: () => void }> = ({ turn, progress, onToggleCard }) => {
+const TurnView: React.FC<{ turn: Turn; onToggleCard: () => void }> = ({ turn, onToggleCard }) => {
   const r = turn.result;
   const team = r ? r.experts.map((x, i) => toDesk(x, i + 1)) : [];
   return (
-    <div className="space-y-3">
+    <div id={`turn-${turn.id}`} className="space-y-3 scroll-mt-4">
       <div className="flex justify-end">
         <p className="max-w-[88%] rounded-lg bg-accent text-white px-3.5 py-2.5 text-base leading-6 whitespace-pre-wrap">{turn.query}</p>
       </div>
@@ -50,8 +47,6 @@ const TurnView: React.FC<{ turn: Turn; progress: LiveProgress | null; onToggleCa
             ) : (
               <ActivityFeed items={turn.feed} />
             ))}
-
-          {progress && <Orb progress={progress} />}
 
           {turn.error && (
             <div role="alert" className="flex items-start gap-2 rounded border border-danger/30 bg-danger-soft px-3 py-2.5 text-sm text-danger">
@@ -115,19 +110,19 @@ const TurnView: React.FC<{ turn: Turn; progress: LiveProgress | null; onToggleCa
 };
 
 // 대화 내용: 요청과 Gon의 진행 기록·결과가 쌓인다
-export const ChatThread: React.FC<Pick<ChatPanelProps, 'turns' | 'onToggleCard'> & { progress: LiveProgress | null }> = ({ turns, progress, onToggleCard }) => {
+export const ChatThread: React.FC<Pick<ChatPanelProps, 'turns' | 'onToggleCard'>> = ({ turns, onToggleCard }) => {
   const endRef = useRef<HTMLDivElement>(null);
   const feedLen = turns.length ? turns[turns.length - 1].feed.length : 0;
   const lastDone = turns.length ? turns[turns.length - 1].done : false;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [turns.length, feedLen, lastDone, progress?.phase, progress?.done]);
+  }, [turns.length, feedLen, lastDone]);
 
   return (
     <div className="no-scrollbar h-full min-h-0 overflow-y-auto bg-surface px-4 py-5 space-y-8">
-      {turns.map((t, i) => (
-        <TurnView key={t.id} turn={t} progress={i === turns.length - 1 && !t.done ? progress : null} onToggleCard={() => onToggleCard(t.id)} />
+      {turns.map((t) => (
+        <TurnView key={t.id} turn={t} onToggleCard={() => onToggleCard(t.id)} />
       ))}
       <div ref={endRef} />
     </div>
@@ -136,8 +131,8 @@ export const ChatThread: React.FC<Pick<ChatPanelProps, 'turns' | 'onToggleCard'>
 
 // 입력창: 항상 화면 아래에 있다
 export const Composer: React.FC<
-  Pick<ChatPanelProps, 'isLoading' | 'draft' | 'onDraft' | 'onSend' | 'onStop' | 'customTeam' | 'onOpenRoster' | 'onRemoveMember' | 'onClearTeam' | 'poolTotal'>
-> = ({ isLoading, draft, onDraft, onSend, onStop, customTeam, onOpenRoster, onRemoveMember, onClearTeam, poolTotal }) => {
+  Pick<ChatPanelProps, 'isLoading' | 'draft' | 'onDraft' | 'onSend' | 'onStop' | 'customTeam' | 'onRemoveMember' | 'onClearTeam'>
+> = ({ isLoading, draft, onDraft, onSend, onStop, customTeam, onRemoveMember, onClearTeam }) => {
   const areaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -217,15 +212,6 @@ export const Composer: React.FC<
             </button>
           )}
         </div>
-
-        <button
-          type="button"
-          onClick={onOpenRoster}
-          className="h-8 px-2.5 -ml-1 rounded text-sm text-sub hover:text-ink hover:bg-ground inline-flex items-center gap-1.5 transition-colors duration-200 ease-out"
-        >
-          <Users className="w-4 h-4 text-accent" aria-hidden />
-          직접 고르기{poolTotal ? ` · ${poolTotal}명` : ''}
-        </button>
       </form>
     </div>
   );
