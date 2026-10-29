@@ -20,7 +20,8 @@ flowchart TD
 
 1. **편성 (Planning)**
    - 담당: `backend/app/core/pipeline.py` (`_plan_prompt`, `_keyword_plan`), `backend/app/core/experts.py`
-   - 총괄(Gon)이 전체 전문가 풀(스킬 43개 + 프롬프트 3개)의 직함과 설명을 검토해 필요한 인원(최대 `GON_MAX_EXPERTS`명)과 과업(task)을 배정한다.
+   - 총괄(Gon)이 전체 전문가 풀(스킬 44개 + 프롬프트 3개)의 직함과 설명을 검토해 필요한 인원(최대 `GON_MAX_EXPERTS`명)과 과업(task)을 배정한다.
+   - 하위 스킬이 수백 개인 전문가(`anthropic-skills`, `k-skill`, `agency-agents`, `scientific`, `ecc`)를 고를 때는 총괄이 요청을 분석해 하위 스킬 파일을 찾을 영문 검색어(`terms`)도 함께 낸다. 키워드 사전은 두지 않으며, 검색어와 맞는 파일이 없으면 기본 지침만 쓴다(`experts._find_sub_skill`).
    - 사용자가 화면(`RosterDrawer`)에서 전문가를 직접 지정한 경우 최우선으로 편성한다.
    - AI 미연결 또는 응답 실패 시 키워드 매칭과 시너지 관계 기반 대체 로직(`_keyword_plan`)으로 자동 전환된다.
 2. **전문가 병렬 작업 (Parallel Execution)**
@@ -41,8 +42,8 @@ flowchart TD
 | 메서드 | 경로 | 설명 | 요청 본문 | 응답 형태 |
 |---|---|---|---|---|
 | `GET` | `/health` | 서버 상태 점검 | 없음 | `{"service": "Gon API", "status": "online", "version": "1.0.0", "mission": "..."}` |
-| `GET` | `/api/office/pool` | 전문가 풀 현황 및 통계 | 없음 | `{"total": 46, "clusters": {...}, "mode": "ai"\|"stub", "max_experts": 8}` |
-| `GET` | `/api/office/experts` | 46명 전체 전문가 카탈로그 | 없음 | `{"experts": [{"id": "...", "name": "...", "kind": "...", "cluster": "...", "accent": "...", "use_for": "..."}]}` |
+| `GET` | `/api/office/pool` | 전문가 풀 현황 및 통계 | 없음 | `{"total": 47, "clusters": {...}, "mode": "ai"\|"stub", "max_experts": 8}` |
+| `GET` | `/api/office/experts` | 47명 전체 전문가 카탈로그 | 없음 | `{"experts": [{"id": "...", "name": "...", "kind": "...", "cluster": "...", "accent": "...", "use_for": "..."}]}` |
 | `POST` | `/api/office/dispatch-stream` | 멀티 에이전트 실행 및 NDJSON 스트리밍 | `{"query": "요청문", "selected_expert_ids": ["id1", "id2"]}` (선택 배열 생략 가능) | `application/x-ndjson` (이벤트 순서: `start` → `plan` → `agent`... → `synthesis` → `final`) |
 
 > 키워드 기반 옛 라우터(`orchestrator.py`)와 `/api/skills`, `/api/route`, `/api/generate`, 호환용 임시 응답(`/api/office/layout`, `/v1/models`)은 제거했다. 선택은 AI가 요구사항을 분석해서 하며, 외부 API 키는 쓰지 않는다.
@@ -53,7 +54,7 @@ flowchart TD
 
 | 변수명 | 기본값 | 설명 |
 |---|---|---|
-| `GON_LLM` | `auto` | `stub`으로 설정 시 실제 AI 호출(`agy`) 없이 모의 응답으로 동작 |
+| `GON_LLM` | `auto` | `auto`는 Antigravity `agy`만 쓴다. `stub`이면 AI 호출 없이 모의 응답. 다른 구독을 조용히 쓰지 않도록 `gemini`·`claude`·`codex`는 직접 지정했을 때만 쓰고, 프롬프트는 stdin으로 넘긴다 |
 | `GON_LLM_WORKERS` | `4` | 전문가 병렬 작업 동시 호출 스레드 수 |
 | `GON_MAX_EXPERTS` | `8` | 한 요청에 배정할 수 있는 최대 전문가 인원수 |
 | `AGY_PATH` | (자동 감지) | Antigravity CLI(`agy` 또는 `agy.exe`) 실행 파일 절대 경로 직접 지정 |
@@ -89,4 +90,4 @@ python -m pytest -q
 
 ## 5. 확인 필요
 
-1. **전문가 풀 동적 확장:** 현재 `registry/skills.json`(43개)과 `prompt/*.md`(3개)의 46명 구조에서 외부 스킬(`status: external`) 추가 시 자동 반영 정책.
+1. **전문가 풀 동적 확장:** 현재 `registry/skills.json`(44개)과 `prompt/*.md`(3개)의 47명 구조에서 외부 스킬(`status: external`) 추가 시 자동 반영 정책.

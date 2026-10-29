@@ -1,6 +1,7 @@
 {
   "ECC": "https://github.com/affaan-m/ECC.git",
   "Scrapling": "https://github.com/D4Vinci/Scrapling.git",
+  "agency-agents": "https://github.com/msitarzewski/agency-agents.git",
   "andrej-karpathy-skills": "https://github.com/multica-ai/andrej-karpathy-skills.git",
   "anthropics-skills": "https://github.com/anthropics/skills.git",
   "awesome-claude-design": "https://github.com/VoltAgent/awesome-claude-design.git",

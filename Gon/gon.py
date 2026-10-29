@@ -1,20 +1,21 @@
 """
-Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /Gon 등록을 한 파일로.
+Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /gon 등록을 한 파일로.
 
     python Gon/gon.py catalog            스킬 목록(id | 용도). AI가 요구사항을 분석해 여기서 고른다
     python Gon/gon.py pick <id> [id…]    고른 스킬의 경로 출력 (없는 저장소는 자동으로 받고, 항상 적용 핵심을 덧붙임)
     python Gon/gon.py fetch <id|all>     스킬 저장소 받기 (shallow)
     python Gon/gon.py remember "<사실>"  장기 메모리에 한 줄 추가
-    python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·아직 커밋 안 된 변경을 한 번에 본다
+    python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·미커밋 변경·개발자 코어 스킬을 한 번에 본다
     python Gon/gon.py log --by claude|gemini "<한 줄>"   작업 끝: 이력에 한 줄 추가 (미커밋 변경 파일 자동 첨부)
     python Gon/gon.py learn <id> "<용도>" "<트리거,…>"   로컬 스킬 생성·등록
-    python Gon/gon.py install            어느 프로젝트에서든 /Gon 쓰도록 전역 명령 등록
-    python Gon/gon.py always on|off      /Gon 없이 모든 세션에 Gon 상시 적용 / 해제
+    python Gon/gon.py install            어느 프로젝트에서든 /gon 쓰도록 전역 명령 등록 (Claude, Gemini, Codex)
+    python Gon/gon.py always on|off      /gon 없이 모든 세션에 Gon 상시 적용 / 해제 (Claude, Gemini, Codex)
     python Gon/gon.py doctor             설치 상태 점검
     python Gon/gon.py run                서비스 준비(의존성 설치) + 백엔드·프론트 서버 실행
     python Gon/gon.py stop               실행 중인 서비스 종료
 """
 
+import glob
 import json
 import os
 import shutil
@@ -36,6 +37,33 @@ LOCAL = GON / "skills" / "local"
 MEMORY = GON / "memory"
 MAX_SKILLS = 5
 DEFAULT = ["karpathy"]
+
+
+# ---------- 도구 탐색 (PATH 미갱신 환경 대비) ----------
+
+def find_tool(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    if os.name == "nt":
+        appdata = os.getenv("APPDATA")
+        if appdata:
+            for ext in (".cmd", ".exe", ".ps1"):
+                cand = os.path.join(appdata, "npm", f"{name}{ext}")
+                if os.path.exists(cand):
+                    return cand
+        if name == "agy":
+            local = os.getenv("LOCALAPPDATA")
+            if local:
+                hits = glob.glob(os.path.join(local, "Microsoft", "WinGet", "Packages", "Google.AntigravityCLI_*", "agy.exe"))
+                if hits:
+                    return hits[0]
+    else:
+        for d in (Path.home() / ".local" / "bin", Path.home() / ".npm-global" / "bin"):
+            cand = d / name
+            if cand.exists():
+                return str(cand)
+    return None
 
 
 # ---------- registry ----------
@@ -98,7 +126,7 @@ def excerpt(path: Path, chars: int = 500) -> str:
 
 def cmd_catalog() -> int:
     registry = load()
-    tag = {"always": " [항상 적용]", "project": " [코드·UI 작업]"}
+    tag = {"always": " [항상 적용]", "dev": " [개발 코어]", "project": " [코드·UI 작업]"}
     for s in registry.values():
         if s["status"] != "external":
             print(f"{s['id']}{tag.get(s.get('core'), '')} | {s['use_for']}")
@@ -111,7 +139,7 @@ def cmd_pick(ids: list[str]) -> int:
     if unknown:
         print(f"[gon] 없는 스킬: {unknown} (python Gon/gon.py catalog 로 목록 확인)", file=sys.stderr)
         return 1
-    # 항상 적용 핵심(ECC 검증·코딩 표준, karpathy)은 고르지 않아도 붙는다
+    # 항상 적용 핵심(ECC 검증·코딩 표준, karpathy)은 고르지 않아도 붙는다. 개발 코어는 목록만 `recent`에 나오고, 고른 것만 받는다.
     chain = [registry[i] for i in dict.fromkeys(ids)]
     always = [s for s in registry.values() if s.get("core") == "always" and s["id"] not in ids]
     need = [r for s in chain + always if (r := repo_of(s)) and not (REPOS / r).exists()]
@@ -145,7 +173,7 @@ def append(file: str, line: str) -> int:
     return 0
 
 
-# ---------- 작업 이력 (Claude Code · Antigravity Gemini 공용) ----------
+# ---------- 작업 이력 (Claude Code · Antigravity Gemini · Codex 공용) ----------
 
 def git_lines(*args: str) -> list[str]:
     r = subprocess.run(["git", "-C", str(HOME), *args], capture_output=True, text=True, encoding="utf-8", errors="replace")
@@ -163,12 +191,12 @@ def uncommitted() -> list[str]:
 
 
 def cmd_log(args: list[str]) -> int:
-    """gon log [--by claude|gemini] "<한 일, 결과, 다음 사람이 알아야 할 것>" — 커밋 안 된 변경 파일은 자동으로 덧붙인다."""
+    """gon log [--by claude|gemini|codex] "<한 일, 결과, 다음 사람이 알아야 할 것>" — 커밋 안 된 변경 파일은 자동으로 덧붙인다."""
     by = os.environ.get("GON_ACTOR", "ai")
     if len(args) >= 2 and args[0] == "--by":
         by, args = args[1], args[2:]
     if not args or args[0] in ("-h", "--help"):
-        print('사용법: gon log --by claude|gemini "<무엇을 했고 결과가 어땠는지>"', file=sys.stderr)
+        print('사용법: gon log --by claude|gemini|codex "<무엇을 했고 결과가 어땠는지>"', file=sys.stderr)
         return 2
     files = uncommitted()
     tail = f" | 미커밋 {len(files)}개: {', '.join(files[:8])}{' 외' if len(files) > 8 else ''}" if files else ""
@@ -179,7 +207,7 @@ def cmd_log(args: list[str]) -> int:
 
 
 def cmd_recent(n: int = 10) -> int:
-    """작업 시작 전에 보는 것: 최근 이력, 최근 커밋, 아직 커밋 안 된 변경(최신순)."""
+    """작업 시작 전에 보는 것: 최근 이력, 최근 커밋, 미커밋 변경, 개발자 코어 스킬 상태."""
     log = MEMORY / "log.md"
     print("## 최근 작업 이력")
     lines = log.read_text(encoding="utf-8").splitlines()[-n:] if log.exists() else []
@@ -197,6 +225,15 @@ def cmd_recent(n: int = 10) -> int:
         print(f"  {path}  ({age})")
     if not rows:
         print("  (없음)")
+
+    registry = load()
+    always_ids = [s["id"] for s in registry.values() if s.get("core") == "always"]
+    dev_ids = [s["id"] for s in registry.values() if s.get("core") == "dev"]
+    proj_ids = [s["id"] for s in registry.values() if s.get("core") == "project"]
+    print("\n## 개발자 코어 스킬 (작업 단계별 적용 — python Gon/gon.py pick <id>)")
+    print(f"  [항상 적용]   {', '.join(always_ids)}")
+    print(f"  [개발 코어]   {', '.join(dev_ids)}  (착수: graphify·context7 | 워크플로: ecc | 감사·압축: ponytail·headroom). 반론 검증 court는 중요한 결정에만")
+    print(f"  [코드·UI 작업] {', '.join(proj_ids)}")
     return 0
 
 
@@ -225,23 +262,30 @@ def cmd_learn(sid: str, use_for: str, triggers: str) -> int:
     return 0
 
 
-# ---------- install (전역 /Gon) ----------
+# ---------- install (전역 /gon 및 /Gon 등록: Claude Code, Gemini CLI, Codex CLI) ----------
 
 def command_body(arg: str) -> str:
     return (
         f"지금부터 이 요청을 Gon으로서 수행한다: {arg}\n\n"
         f"1. `{GON / 'GON.md'}`를 읽고 그대로 따른다. Gon 홈은 `{HOME}`이다.\n"
-        "2. 현재 작업 디렉토리는 사용자의 프로젝트다. 산출물은 그곳에 만들고, Gon 홈에는 메모리·스킬만 기록한다.\n"
-        "3. 요청이 비어 있으면 무엇을 할지 한 줄로 물어본다.\n"
+        f"2. `python -I \"{GON / 'gon.py'}\" recent`를 먼저 실행해 최근 이력과 개발자 코어 스킬(karpathy, ecc, ponytail, graphify, context7 등)을 확인한다.\n"
+        "3. 현재 작업 디렉토리는 사용자의 프로젝트다. 산출물은 그곳에 만들고, Gon 홈에는 메모리·스킬만 기록한다.\n"
+        f"4. 요청이 비어 있으면 `python -I \"{GON / 'gon.py'}\" doctor`로 상태를 점검하고, 서비스가 꺼져 있으면 `python -I \"{GON / 'gon.py'}\" run --no-open`을 백그라운드로 실행한 뒤 무엇을 할지 한 줄로 물어본다.\n"
     )
 
 
 def cmd_install() -> int:
+    md_content = "---\ndescription: Gon 에이전트로 요청을 수행한다\nargument-hint: [요청]\n---\n\n" + command_body("$ARGUMENTS")
+    toml_content = 'description = "Gon 에이전트로 요청을 수행한다"\nprompt = """\n' + command_body("{{args}}") + '"""\n'
+
+    # 대소문자(/gon, /Gon) 및 3대 CLI(Claude, Gemini, Codex) 동시 등록
     targets = {
-        Path.home() / ".claude" / "commands" / "Gon.md":
-            "---\ndescription: Gon 에이전트로 요청을 수행한다\nargument-hint: <요청>\n---\n\n" + command_body("$ARGUMENTS"),
-        Path.home() / ".gemini" / "commands" / "Gon.toml":
-            'description = "Gon 에이전트로 요청을 수행한다"\nprompt = """\n' + command_body("{{args}}") + '"""\n',
+        Path.home() / ".claude" / "commands" / "gon.md": md_content,
+        Path.home() / ".claude" / "commands" / "Gon.md": md_content,
+        Path.home() / ".gemini" / "commands" / "gon.toml": toml_content,
+        Path.home() / ".gemini" / "commands" / "Gon.toml": toml_content,
+        Path.home() / ".codex" / "prompts" / "gon.md": md_content,
+        Path.home() / ".codex" / "prompts" / "Gon.md": md_content,
     }
     for path, body in targets.items():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -313,7 +357,7 @@ def cmd_run(open_browser: bool = True) -> int:
                 print("서버가 시작 직후 종료됐다. 위 오류 메시지를 확인해라.")
                 return 1
             try:
-                urllib.request.urlopen(f"http://127.0.0.1:{BACKEND_PORT}/api/office/layout", timeout=1)
+                urllib.request.urlopen(f"http://127.0.0.1:{BACKEND_PORT}/health", timeout=1)
                 urllib.request.urlopen(url, timeout=1)
                 break
             except Exception:
@@ -351,7 +395,11 @@ def cmd_stop() -> int:
     return 0
 
 
-ALWAYS_FILES = (Path.home() / ".claude" / "CLAUDE.md", Path.home() / ".gemini" / "GEMINI.md")
+ALWAYS_FILES = (
+    Path.home() / ".claude" / "CLAUDE.md",
+    Path.home() / ".gemini" / "GEMINI.md",
+    Path.home() / ".codex" / "AGENTS.md",
+)
 BEGIN, END = "<!-- gon:begin -->", "<!-- gon:end -->"
 
 
@@ -380,15 +428,20 @@ def cmd_doctor() -> int:
     present = {r for s in registry.values() if (r := repo_of(s)) and (REPOS / r).exists()}
     needed = {r for s in registry.values() if (r := repo_of(s))}
     broken = [sid for sid, s in registry.items() if repo_of(s) in present and not entry_path(s).exists()]
-    tools = {t: bool(shutil.which(t)) for t in ("git", "agy", "claude", "gemini")}
+    tools = {t: bool(find_tool(t)) for t in ("git", "agy", "claude", "gemini", "codex")}
     print(f"Gon 홈: {HOME}")
     print(f"스킬 {len(registry)}개 | 저장소 {len(present)}/{len(needed)} 설치 (나머지는 쓸 때 자동으로 받음)")
     print(f"경로 깨짐: {broken or '없음'}")
     up = port_busy(BACKEND_PORT) and port_busy(FRONTEND_PORT)
     print(f"서비스: {'실행 중 http://localhost:' + str(FRONTEND_PORT) if up else '꺼짐 (python Gon/gon.py run)'}")
     print("도구: " + ", ".join(f"{t}={'O' if ok else 'X'}" for t, ok in tools.items()))
-    for p in (Path.home() / ".claude/commands/Gon.md", Path.home() / ".gemini/commands/Gon.toml"):
-        print(f"전역 /Gon: {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
+    cmd_paths = (
+        Path.home() / ".claude/commands/gon.md",
+        Path.home() / ".gemini/commands/gon.toml",
+        Path.home() / ".codex/prompts/gon.md",
+    )
+    for p in cmd_paths:
+        print(f"전역 /gon: {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
     for p in ALWAYS_FILES:
         on = p.exists() and BEGIN in p.read_text(encoding="utf-8")
         print(f"상시 적용: {p} {'O' if on else 'X (python Gon/gon.py always on)'}")

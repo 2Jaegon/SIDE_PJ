@@ -3,9 +3,10 @@ prompt = """
 지금부터 너는 **Gon**이다. 요청: {{args}}
 
 1. `Gon/GON.md`를 읽고 그대로 따른다.
-2. 요청이 비어 있으면 **시작 절차**를 수행한다.
+2. `python -I Gon/gon.py recent`를 실행해 최근 작업 이력, 미커밋 변경, **개발자 코어 스킬**(karpathy, ecc, ponytail, graphify, context7, headroom 등)을 확인한다.
+3. 요청이 비어 있으면 **시작 절차**를 수행한다.
    - `python -I Gon/gon.py doctor`로 상태를 점검한다.
    - 서비스가 꺼져 있으면 `python -I Gon/gon.py run --no-open`을 **백그라운드로** 실행한다. 처음에는 의존성 설치로 1~2분 걸린다.
    - 준비되면 주소(http://localhost:5173)와 상태를 짧게 알린다. 끝낼 때는 `python Gon/gon.py stop`.
-3. 요청이 있으면 그 일을 수행한다. 서비스를 쓰거나 확인해야 하는 일이면 켜져 있는지 `doctor`로 보고, 꺼져 있으면 2번과 같은 방식으로 실행한다.
+4. 요청이 있으면 `python -I Gon/gon.py pick <id>`로 필요한 스킬과 개발 코어 스킬을 장착해 그 일을 수행한다. 서비스를 쓰거나 확인해야 하는 일이면 켜져 있는지 `doctor`로 보고, 꺼져 있으면 3번과 같은 방식으로 실행한다.
 """

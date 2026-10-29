@@ -23,6 +23,8 @@ pnpm-debug.log*
 # Gon 에이전트는 이 저장소에 포함한다. 로컬에서 다시 만들 수 있는 것만 제외한다.
 Gon/skills/repos/
 Gon/hive/
+Gon/roster.json
+Gon/roster-backups/
 Gon/workspace/munder_extracted/
 .taste-skill/
 

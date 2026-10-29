@@ -1,5 +1,5 @@
 {
- "_doc": "Gon 스킬 레지스트리 — 단일 진실 원천. entry는 Gon/skills/repos/ 기준 상대경로이며 선택된 스킬만 그때 읽는다. status: installed(호출 가능) | reference(문서를 읽어 적용) | library(코드에서 import) | external(스킬 아님, 사용자 도구). guard가 있으면 실행 전 반드시 확인. core: always(모든 작업에 항상 적용, 지침 발췌를 route 출력에 붙임) | project(코드·UI 작업일 때 반드시 읽고 적용).",
+ "_doc": "Gon 스킬 레지스트리 — 단일 진실 원천. entry는 Gon/skills/repos/ 기준 상대경로이며 선택된 스킬만 그때 읽는다. status: installed(호출 가능) | reference(문서를 읽어 적용) | library(코드에서 import) | external(스킬 아님, 사용자 도구). guard가 있으면 실행 전 반드시 확인. core: always(모든 작업에 항상 적용, 지침 발췌를 route 출력에 붙임) | dev(개발·구조파악·감사 코어 스킬) | project(코드·UI 작업일 때 반드시 읽고 적용).",
  "skills": [
   {
    "id": "karpathy",
@@ -38,7 +38,8 @@
     "hook"
    ],
    "synergy": [],
-   "guard": "전체를 읽지 말고 grep으로 해당 스킬만 연다"
+   "guard": "전체를 읽지 말고 grep으로 해당 스킬만 연다",
+   "core": "dev"
   },
   {
    "id": "ponytail",
@@ -58,7 +59,8 @@
    "synergy": [
     "karpathy",
     "court"
-   ]
+   ],
+   "core": "dev"
   },
   {
    "id": "anthropic-skills",
@@ -112,7 +114,8 @@
    "synergy": [
     "karpathy",
     "mcp-builder"
-   ]
+   ],
+   "core": "dev"
   },
   {
    "id": "harness2",
@@ -212,7 +215,8 @@
     "im-not-ai",
     "impeccable",
     "motion"
-   ]
+   ],
+   "core": "project"
   },
   {
    "id": "ui-ux-pro-max",
@@ -232,7 +236,8 @@
    "synergy": [
     "taste",
     "impeccable"
-   ]
+   ],
+   "core": "project"
   },
   {
    "id": "impeccable",
@@ -251,7 +256,8 @@
    "synergy": [
     "taste",
     "ui-ux-pro-max"
-   ]
+   ],
+   "core": "project"
   },
   {
    "id": "awesome-claude-design",
@@ -462,7 +468,7 @@
    "id": "graphify",
    "cluster": "research",
    "status": "reference",
-   "entry": "graphify/README.md",
+   "entry": "graphify/graphify/skill.md",
    "use_for": "코드·문서·PDF를 지식 그래프로 매핑해 구조 파악",
    "triggers": [
     "지식그래프",
@@ -474,13 +480,14 @@
    "synergy": [
     "headroom",
     "context7"
-   ]
+   ],
+   "core": "dev"
   },
   {
    "id": "headroom",
    "cluster": "research",
    "status": "reference",
-   "entry": "headroom/README.md",
+   "entry": "headroom/wiki/cli.md",
    "use_for": "긴 로그·출력 압축으로 토큰 절약",
    "triggers": [
     "토큰",
@@ -490,7 +497,8 @@
    ],
    "synergy": [
     "graphify"
-   ]
+   ],
+   "core": "dev"
   },
   {
    "id": "court",
@@ -761,6 +769,29 @@
    ],
    "synergy": [],
    "core": "project"
+  },
+  {
+   "id": "agency-agents",
+   "cluster": "plan",
+   "status": "reference",
+   "entry": "agency-agents/README.md",
+   "use_for": "직무별 전문가 페르소나 약 325개(마케팅·디자인·제품·영업·재무·보안·프로젝트관리 등). 사람 직무 한 명을 맡겨야 하는 일(릴스 기획, 기획전 문구, 영업 제안 등)에서 맞는 직무 파일을 골라 그 역할로 작업",
+   "triggers": [
+    "마케팅",
+    "콘텐츠",
+    "릴스",
+    "브랜드",
+    "영업",
+    "제품 기획",
+    "기획전",
+    "직무",
+    "페르소나"
+   ],
+   "synergy": [
+    "k-skill",
+    "im-not-ai"
+   ],
+   "guard": "약 325개 파일 — 폴더(marketing, design, product, sales …)를 grep해 직무 파일 1~2개만 연다. 영어 원문이라 산출물은 한국어로 쓴다"
   }
  ]
 }
