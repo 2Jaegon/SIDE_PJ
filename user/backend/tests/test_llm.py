@@ -149,7 +149,7 @@ def test_ask_sends_prompt_on_stdin_for_cmd_clis(monkeypatch):
 
     monkeypatch.setenv("GON_LLM", "claude")
     monkeypatch.setattr(llm, "_find_exec", lambda name: "/usr/bin/claude")
-    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    monkeypatch.setattr(llm, "_run", fake_run)
     assert llm.ask("a\nb & c") == "답변"
     assert seen["kw"]["input"] == b"a\nb & c"
     assert "stdin" not in seen["kw"]
@@ -171,7 +171,7 @@ def test_ask_puts_images_in_cwd_for_agy(monkeypatch):
         return _Done()
 
     monkeypatch.setattr(llm, "find_cli", lambda: ("agy", "fake-exe"))
-    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    monkeypatch.setattr(llm, "_run", fake_run)
     assert llm.ask("질문", images=[("attached-1.png", b"x")]) == "ok"
     assert seen["files"] == ["attached-1.png"]
     assert "view_file" in seen["cmd"][2] and "attached-1.png" in seen["cmd"][2]
@@ -188,7 +188,7 @@ def test_ask_tells_other_cli_it_cannot_see_images(monkeypatch):
 
     monkeypatch.setattr(llm, "find_cli", lambda: ("claude", "fake-exe"))
     monkeypatch.setattr(llm, "find_sub_cli", lambda: None)  # 이미지를 볼 서브 AI가 없을 때
-    monkeypatch.setattr(llm.subprocess, "run", fake_run)
+    monkeypatch.setattr(llm, "_run", fake_run)
     llm.ask("질문", images=[("attached-1.png", b"x")])
     assert seen["files"] == []
     assert "볼 수 없" in seen["input"]
@@ -214,7 +214,7 @@ def test_quota_error_switches_to_sub_then_returns_to_main(monkeypatch):
     _quota_setup(monkeypatch)
     used = []
 
-    def fake_once(prompt, timeout, images, model, cli):
+    def fake_once(prompt, timeout, images, model, cli, web=False):
         used.append(cli[0])
         if cli[0] == "claude":
             raise llm.LLMError("Claude usage limit reached|%d" % (time.time() + 3600))
@@ -257,7 +257,7 @@ def test_info_reports_fallback_and_image_ability(monkeypatch):
 def _fake_cli(monkeypatch, script, kind="codex"):
     import sys
     monkeypatch.setattr(llm, "find_cli", lambda: (kind, sys.executable))
-    monkeypatch.setattr(llm, "_build_cmd", lambda kind, exe, prompt, timeout: ([sys.executable, "-c", script], prompt.encode("utf-8")))
+    monkeypatch.setattr(llm, "_build_cmd", lambda kind, exe, prompt, timeout, **kwargs: ([sys.executable, "-c", script], prompt.encode("utf-8")))
 
 
 def test_stream_yields_chunks_and_reads_stdin(monkeypatch):
@@ -325,7 +325,7 @@ def test_quota_re_matches_claude_5_hour_limit_and_stream_preserves_reset(monkeyp
     )
     agy_script = "import sys\nprint('서브 스트리밍 응답')\n"
 
-    def fake_build(kind, exe, prompt, timeout):
+    def fake_build(kind, exe, prompt, timeout, **kwargs):
         if kind == "claude":
             return [sys.executable, "-c", claude_script], prompt.encode("utf-8")
         return [sys.executable, "-c", agy_script], None
@@ -345,3 +345,56 @@ def test_stream_kills_process_when_consumer_stops(monkeypatch):
     t = time.time()
     gen.close()  # 사용자가 멈추면 프로세스를 끝낸다
     assert time.time() - t < 5
+
+
+def test_models_include_quota_exceeded_flag(monkeypatch):
+    monkeypatch.setenv("GON_LLM", "claude")
+    monkeypatch.setattr(llm, "_find_exec", lambda name: "/usr/bin/claude")
+    claude_models = llm.models()
+    assert len(claude_models) > 0
+    for m in claude_models:
+        assert "quota_exceeded" in m
+        assert m["quota_exceeded"] is False
+
+
+def test_info_includes_blocked_main_models_when_fallback_active(monkeypatch):
+    import time
+    _quota_setup(monkeypatch)
+    monkeypatch.setattr(llm, "available", lambda: True)
+    monkeypatch.setattr(llm, "_list_agy_models", lambda exe: [{"id": "gemini-flash", "label": "Gemini Flash"}])
+    llm.mark_main_blocked(time.time() + 600)
+    info = llm.info()
+    assert info["kind"] == "agy"
+    assert "fallback" in info
+    assert "until_formatted" in info["fallback"]
+    models = info["models"]
+    
+    # 서브 AI 모델 (gemini-flash) 확인
+    sub_m = [m for m in models if m["id"] == "gemini-flash"]
+    assert len(sub_m) == 1
+    assert sub_m[0]["quota_exceeded"] is False
+    
+    # 한도 초과된 메인 AI 모델 (sonnet 등) 확인
+    blocked_m = [m for m in models if m.get("quota_exceeded") is True]
+    assert len(blocked_m) == len(llm.CLAUDE_MODELS)
+    for m in blocked_m:
+        assert m["label"].startswith("Claude ")
+        assert "한도 초과" in m["note"] and "복귀" in m["note"]
+
+    # check_model 검증: 서브 모델은 통과, 한도 초과된 메인 모델은 None
+    assert llm.check_model("gemini-flash") == "gemini-flash"
+    assert llm.check_model("sonnet") is None
+
+
+
+def test_run_kills_child_processes_on_timeout():
+    # 래퍼(cmd/.CMD)만 죽이면 자식이 파이프를 잡고 있어 timeout 뒤에도 매달린다. 트리 전체를 끝내야 빨리 돌아온다
+    import os
+    import sys
+    import time
+    cmd = ["cmd", "/c", sys.executable, "-c", "import time; time.sleep(30)"] if os.name == "nt" else ["sh", "-c", f"{sys.executable} -c 'import time; time.sleep(30)'"]
+    import tempfile
+    start = time.time()
+    with tempfile.TemporaryDirectory() as d, pytest.raises(llm.subprocess.TimeoutExpired):
+        llm._run(cmd, cwd=d, timeout=1)
+    assert time.time() - start < 15

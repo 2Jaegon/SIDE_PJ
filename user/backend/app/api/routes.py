@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Literal, Optional, Tuple
 
-from app.core import experts, pipeline
+from app.core import experts, interview, pipeline, skillfinder
 
 router = APIRouter()
 
@@ -26,13 +26,33 @@ class HistoryMsg(BaseModel):
     content: str = Field("", max_length=20000)
 
 
+class InterviewAnswer(BaseModel):
+    title: str = Field("", max_length=200)
+    answer: str = Field("", max_length=1000)
+
+
+class InterviewRequest(BaseModel):
+    query: str = Field("", max_length=8000)
+    history: List[HistoryMsg] = Field(default_factory=list, max_length=40)
+    answers: List[InterviewAnswer] = Field(default_factory=list, max_length=12)  # 지금까지 라운드의 질문 제목과 사용자의 답
+    round: int = Field(1, ge=1, le=interview.MAX_ROUNDS)
+    max_rounds: int = Field(2, ge=2, le=interview.MAX_ROUNDS)  # 2=간단(한 번 묻고 확정), 3=심층(최대 두 번 묻고 확정). 마지막 라운드는 확정만 한다
+    model: Optional[str] = Field(default=None, max_length=64, pattern=r"^[a-z0-9.\-]*$")
+
+
+class SkillInstallRequest(BaseModel):
+    ref: str = Field(..., max_length=200, pattern=r"^[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*@[A-Za-z0-9][\w.-]*$")  # owner/repo@skill
+
+
 class DispatchRequest(BaseModel):
     query: str = ""
     selected_expert_ids: Optional[List[str]] = None
     images: List[ImageIn] = []
     history: List[HistoryMsg] = Field(default_factory=list, max_length=40)  # 같은 대화의 이전 질문과 답
     model: Optional[str] = Field(default=None, max_length=64, pattern=r"^[a-z0-9.\-]*$")  # 화면에서 고른 모델(목록에 없으면 기본 모델)
-    depth: Literal["fast", "normal", "deep"] = "normal"  # 팀 인원 상한(빠르게 4 / 보통 8 / 깊게 16)
+    depth: Literal["fast", "normal", "deep"] = "normal"  # 팀 인원 상한(빠르게 4 / 보통 8 / 깊게 16)과 QA 수정 라운드
+    brief: str = Field("", max_length=6000)  # 요구사항 인터뷰로 확정한 명세(없으면 원문만으로 진행)
+    answers: List["InterviewAnswer"] = Field(default_factory=list, max_length=12)  # 인터뷰에서 사용자가 고른 답
 
 
 def _decode_images(images: List[ImageIn]) -> List[Tuple[str, bytes]]:
@@ -92,9 +112,26 @@ def dispatch_office_stream(req: DispatchRequest):
     def lines():
         try:
             history = [m.model_dump() for m in req.history]
-            for event in pipeline.run(query, req.selected_expert_ids, images, history, req.model, req.depth):
+            answers = [a.model_dump() for a in req.answers]
+            for event in pipeline.run(query, req.selected_expert_ids, images, history, req.model, req.depth, req.brief.strip(), answers):
                 yield json.dumps(event, ensure_ascii=False) + "\n"
         except Exception as e:
             yield json.dumps({"type": "error", "message": f"서버 오류: {e}"}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(lines(), media_type="application/x-ndjson")
+
+
+@router.post("/office/interview")
+def office_interview(req: InterviewRequest):
+    """요구사항 인터뷰 한 라운드(grill-me). 묻을 게 있으면 질문과 추천 답을, 없으면 팀에 넘길 확정 명세(brief)를 돌려준다."""
+    query = req.query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="요청을 입력해주세요.")
+    history = [m.model_dump() for m in req.history]
+    return interview.run(query, [a.model_dump() for a in req.answers], req.round, pipeline._history_block(history), req.model, req.max_rounds)
+
+
+@router.post("/office/skills/install")
+def install_skill(req: SkillInstallRequest):
+    """팀 편성 중 찾은 스킬 후보(skill_gap 이벤트)를 사용자가 고르면 받아서 레지스트리에 등록한다."""
+    return skillfinder.install(req.ref)

@@ -9,7 +9,7 @@ import { FeedItem } from './components/ActivityFeed';
 import { LoginPage } from './components/LoginPage';
 import { Mark } from './components/Mark';
 import { Attachment, MAX_ATTACHMENTS, fromDataUrl, toAttachment } from './attachments';
-import { Depth, LlmInfo, PoolSummary, StreamEvent, Result, Turn, toDesk } from './types';
+import { Depth, InterviewMode, InterviewReply, LlmInfo, PoolSummary, StreamEvent, Result, Turn, toDesk } from './types';
 import { lensSummary } from './components/TeamControls';
 import { AuthUser, getMeApi, logoutApi } from './auth';
 import { fetchHistoryApi, saveHistoryTurnApi, clearHistoryApi, HistoryItem } from './history';
@@ -50,6 +50,9 @@ export function App() {
 
   const runId = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  // 요구사항 인터뷰가 사용자의 답을 기다리는 동안의 응답 통로
+  const interviewWait = useRef<{ turnId: number; resolve: (a: Record<string, string> | null) => void } | null>(null);
+  const expandedBefore = useRef<boolean | null>(null); // 인터뷰 전에 채팅이 펼쳐져 있었는지(끝나면 되돌린다)
   const tabRef = useRef(tab);
   tabRef.current = tab;
 
@@ -168,6 +171,26 @@ export function App() {
     } catch {
       // 이번 세션에만 적용
     }
+  };
+  // 요구사항 인터뷰(grill-me): 요청이 클 때 팀을 꾸리기 전에 먼저 묻는다. 기본 켬
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>(() => {
+    try {
+      const m = localStorage.getItem('gon.interview');
+      return m === 'off' || m === 'quick' ? m : 'deep'; // 예전 값('on')과 처음은 심층
+    } catch {
+      return 'deep';
+    }
+  });
+  const chooseInterviewMode = (m: InterviewMode) => {
+    setInterviewMode(m);
+    try {
+      localStorage.setItem('gon.interview', m);
+    } catch {
+      // 이번 세션에만 적용
+    }
+  };
+  const answerInterview = (turnId: number, answers: Record<string, string> | null) => {
+    if (interviewWait.current?.turnId === turnId) interviewWait.current.resolve(answers);
   };
   const chooseModel = (id: string) => {
     setModel(id);
@@ -316,7 +339,9 @@ export function App() {
           setWorkingAgentIds(team.map((t) => t.id));
           setActiveAgentIds(team.map((t) => t.id));
           say(lead, `${team.length}명을 책상에 앉혔어요(${lensSummary(ev.experts)})${ev.reason ? `. ${ev.reason}` : ''}`, 'plan');
-          team.forEach((t) => say(t, `맡은 일: ${t.name}`, 'task'));
+          team.forEach((t) => say(t, `맡은 일: ${brief(t.name)}`, 'task'));
+          const delegated = ev.experts.filter((x) => x.via).map((x) => `${x.name} → ${x.via === 'codex' ? 'Codex' : 'Gemini'}`);
+          if (delegated.length) say(lead, `서브 AI에 나눠 맡겼어요: ${delegated.join(', ')}`, 'via');
           return null;
         }
         case 'agent': {
@@ -327,7 +352,51 @@ export function App() {
             setFailedAgentIds((f) => [...f, ev.id]);
             setActiveAgentIds((a) => a.filter((x) => x !== ev.id));
           }
-          if (d) say(d, ev.status === 'error' ? `작업 실패 (${brief(ev.text)})` : brief(ev.text), 'end');
+          if (d) say(d, ev.status === 'error' ? `작업 실패 (${brief(ev.text)})` : ev.revised ? '수정 반영' : ev.added ? '추가 작업 완료' : '작업 완료', 'end'); // 내용은 총괄이 취합해 전달하므로 한 줄 상태만 보인다
+          return null;
+        }
+        case 'review': {
+          const lead = roster[0];
+          if (ev.stage === 'start') {
+            setWorkingAgentIds([lead.id]);
+            say(lead, `결과를 검토해요. 긍정·부정 평가자가 ${ev.targets.length}명의 결과를 평가해요`, 'review');
+          } else {
+            say(toDesk(ev.reviewer, 0), ev.status === 'error' ? `평가 실패 (${ev.summary})` : ev.summary, 'review-end');
+          }
+          return null;
+        }
+        case 'qa': {
+          const qaDesk = toDesk(ev.qa, 0);
+          if (ev.stage === 'triage') {
+            const names = ev.assignments.map((a) => a.name).join(', ');
+            say(qaDesk, ev.assignments.length ? `${ev.assignments.length}명에게 수정을 전달했어요 (${names})` : '고칠 항목이 없어요', 'qa-triage');
+            if (ev.additions?.length) say(qaDesk, `개선을 위해 ${ev.additions.map((a) => a.name).join(', ')}을(를) 추가로 투입해요`, 'qa-add');
+          } else if (ev.stage === 'final') {
+            const bad = ev.checks.filter((c) => !c.ok).length;
+            say(qaDesk, ev.verdict === 'pass' ? '최종 점검을 통과했어요' : `최종 점검 · 확인할 것 ${bad || ev.notes.length}건이 있어요`, 'qa-final');
+          } else {
+            const left = ev.checks.reduce((n, c) => n + c.unresolved.length, 0);
+            say(qaDesk, ev.overall === 'pass' ? '수정이 모두 반영된 것을 확인했어요' : `재확인 ${ev.round}라운드 · 미해결 ${left}건`, 'qa-verify');
+          }
+          return null;
+        }
+        case 'plan_add': {
+          const d = toDesk(ev.expert, roster.length);
+          roster = [...roster, d];
+          setDesks(roster);
+          setActiveAgentIds((a) => [...a, d.id]);
+          return null;
+        }
+        case 'revise': {
+          if (ev.status === 'start') setWorkingAgentIds((w) => (w.includes(ev.id) ? w : [...w, ev.id]));
+          else setWorkingAgentIds((w) => w.filter((x) => x !== ev.id));
+          const d = find(ev.id);
+          if (d && ev.status === 'start') say(d, `QA 요청 ${ev.must_fix?.length ?? 0}건 반영 중`, 'revise');
+          if (d && ev.status === 'error') say(d, `수정 실패 (${ev.message ?? ''})`, 'revise-err');
+          return null;
+        }
+        case 'skill_gap': {
+          say(roster[0], `팀에 없는 능력 ${ev.gaps.length}개의 스킬 후보를 찾았어요. 답과 함께 보여 드릴게요`, 'skill-gap');
           return null;
         }
         case 'synthesis': {
@@ -346,7 +415,57 @@ export function App() {
       }
     };
 
+    // 요구사항 인터뷰: 이미지가 있거나 팀을 직접 골랐거나 짧은 요청이면 건너뛴다. 서버가 응답하지 않아도 요청은 이어진다
+    const interview = async (): Promise<{ spec: string; given: { title: string; answer: string }[] }> => {
+      const given: { title: string; answer: string }[] = [];
+      const maxRounds = interviewMode === 'quick' ? 2 : 3; // 마지막 라운드는 확정만 하므로 묻는 횟수는 하나 적다
+      for (let round = 1; round <= maxRounds; round++) {
+        const res = await fetch('/api/office/interview', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, history, answers: given, round, max_rounds: maxRounds, ...(model ? { model } : {}) }),
+          signal: ctrl.signal,
+        });
+        if (!res.ok) return { spec: '', given };
+        const data = (await res.json()) as InterviewReply;
+        if (data.ready || data.questions.length === 0) {
+          if (data.brief || given.length) {
+            patch((t) => ({ ...t, interview: { status: 'done', round, questions: [], answers: given, brief: data.brief, assumptions: data.assumptions } }));
+          }
+          return { spec: data.brief, given };
+        }
+        setTab('chat');
+        patch((t) => ({ ...t, interview: { status: 'asking', round, questions: data.questions, answers: given } }));
+        if (expandedBefore.current === null) expandedBefore.current = isChatExpanded;
+        setIsChatExpanded(true); // 질문 카드가 작은 채팅 칸에 갇히지 않게 답하는 동안만 채팅을 펼친다
+        let picked: Record<string, string> | null;
+        try {
+          picked = await new Promise<Record<string, string> | null>((resolve, reject) => {
+            interviewWait.current = { turnId: myRun, resolve };
+            ctrl.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true });
+          });
+        } finally {
+          interviewWait.current = null;
+          if (expandedBefore.current !== null) setIsChatExpanded(expandedBefore.current);
+          expandedBefore.current = null;
+        }
+        if (picked === null) {
+          patch((t) => ({ ...t, interview: undefined }));
+          return { spec: '', given: [] }; // 건너뛰기: 원문만으로 진행
+        }
+        for (const q of data.questions) given.push({ title: q.title, answer: picked[q.id] || q.recommended });
+        patch((t) => ({ ...t, interview: { status: 'answered', round, questions: [], answers: [...given] } }));
+        setTab('office');
+      }
+      return { spec: '', given };
+    };
+
     try {
+      let spec = '';
+      let given: { title: string; answer: string }[] = [];
+      if (interviewMode !== 'off' && sent.length === 0 && customTeam.length === 0 && query.trim().length >= 8) {
+        ({ spec, given } = await interview());
+      }
       const payload: {
         query: string;
         selected_expert_ids?: string[];
@@ -354,7 +473,9 @@ export function App() {
         history: { role: 'user' | 'assistant'; content: string }[];
         model?: string;
         depth: Depth;
-      } = { query, history, depth, ...(model ? { model } : {}) };
+        brief?: string;
+        answers?: { title: string; answer: string }[];
+      } = { query, history, depth, ...(model ? { model } : {}), ...(spec ? { brief: spec } : {}), ...(given.length ? { answers: given } : {}) };
       if (sent.length > 0) payload.images = sent.map(({ mime, data }) => ({ mime, data }));
       if (customTeam.length > 0) payload.selected_expert_ids = customTeam.map((c) => c.id);
 
@@ -613,6 +734,7 @@ export function App() {
                 onToggleCard={(id) => setTurns((ts) => ts.map((t) => (t.id === id ? { ...t, card: !t.card } : t)))}
                 onRegenerate={regenerate}
                 onEdit={editQuestion}
+                onInterviewAnswer={answerInterview}
               />
             </section>
             <div className="shrink-0">
@@ -635,6 +757,8 @@ export function App() {
                 depth={depth}
                 depthCaps={pool?.depths}
                 onDepth={chooseDepth}
+                interviewMode={interviewMode}
+                onInterviewMode={chooseInterviewMode}
                 isExpanded={isChatExpanded}
                 onToggleExpand={() => setIsChatExpanded((prev) => !prev)}
               />
@@ -657,6 +781,17 @@ export function App() {
       <AgentTerminalModal
         agent={selectedAgent}
         log={selectedAgentId ? texts[selectedAgentId] : undefined}
+        status={
+          selectedAgentId
+            ? failedAgentIds.includes(selectedAgentId)
+              ? 'failed'
+              : workingAgentIds.includes(selectedAgentId)
+              ? 'working'
+              : texts[selectedAgentId]
+              ? 'done'
+              : 'idle'
+            : 'idle'
+        }
         onClose={() => setSelectedAgentId(null)}
       />
 

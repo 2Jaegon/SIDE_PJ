@@ -29,6 +29,33 @@ from pathlib import Path
 from typing import Iterator, List, Optional, Tuple
 
 
+def kill_tree(proc: "subprocess.Popen") -> None:
+    """프로세스와 그 자식을 모두 끝낸다. Windows에서 claude.CMD 같은 래퍼만 죽이면 자식(node)이 남아
+    파이프가 닫히지 않아 timeout 뒤에도 수 분씩 매달린다."""
+    try:
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, timeout=10)
+        proc.kill()
+    except Exception:
+        pass
+
+
+def _run(cmd: List[str], cwd: str, timeout: int, input: Optional[bytes] = None, stdin: Optional[int] = None) -> "subprocess.CompletedProcess":
+    """subprocess.run과 같지만, 시간이 지나면 자식 프로세스까지 끝낸다(kill_tree). TimeoutExpired를 던진다."""
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd,
+                            stdin=subprocess.PIPE if input is not None else (stdin if stdin is not None else subprocess.DEVNULL))
+    try:
+        stdout, stderr = proc.communicate(input=input, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        kill_tree(proc)
+        try:
+            proc.communicate(timeout=10)
+        except Exception:
+            pass
+        raise
+    return subprocess.CompletedProcess(cmd, proc.returncode, stdout, stderr)
+
+
 class LLMError(Exception):
     pass
 
@@ -253,6 +280,25 @@ def find_sub_cli() -> Optional[Tuple[str, str]]:
     return None
 
 
+def sub_cli_for(via: Optional[str]) -> Optional[Tuple[str, str]]:
+    """업무를 맡길 서브 AI(via: 'gemini' | 'codex'). `gon install`에서 서브로 고른 것이고 메인과 다를 때만 돌려준다.
+    GON_LLM을 직접 지정했거나 서브로 연결하지 않았거나 설치돼 있지 않으면 None(그러면 메인이 한다)."""
+    if via not in ("gemini", "codex") or os.getenv("GON_LLM", "auto").strip().lower() != "auto":
+        return None
+    try:
+        tools = json.loads(CHOICE.read_text(encoding="utf-8")).get("tools") or []
+    except (OSError, ValueError):
+        return None
+    if via not in tools or via == main_tool():
+        return None
+    if via == "gemini":
+        agy = find_agy()
+        if agy:
+            return ("agy", agy)
+    exe = _find_exec(via)
+    return (via, exe) if exe else None
+
+
 def can_generate_image() -> Tuple[bool, Optional[str]]:
     """이미지 생성을 맡길 수 있는 AI 후보(가능 여부, AI 이름). 메인이 claude면 서브에서 찾는다.
     주의: 헤드리스 agy -p는 시험에서 이미지를 만들지 못했고, codex는 미확인이다. 후보일 뿐 생성 보장이 아니다."""
@@ -275,10 +321,10 @@ LABELS = {"agy": "Gemini · Antigravity", "gemini": "Gemini CLI", "claude": "Cla
 # 사용자가 고를 수 있는 모델. claude는 CLI가 받는 별칭(항상 최신 버전을 가리킨다), agy는 `agy models` 결과.
 # 첫 번째가 기본값이다. gemini·codex는 목록을 받을 방법이 없어 고르지 않고 CLI 기본 모델을 쓴다.
 CLAUDE_MODELS = [
-    {"id": "sonnet", "label": "Sonnet 5.5", "note": "빠르고 균형 잡힌 기본"},
-    {"id": "opus", "label": "Opus 5.5", "note": "복잡한 분석·긴 글"},
-    {"id": "haiku", "label": "Haiku 5.5", "note": "가장 빠름"},
-    {"id": "fable", "label": "Fable 5.1", "note": "가장 강력함, 느림"},
+    {"id": "sonnet", "label": "Sonnet 5.5", "note": "빠르고 균형 잡힌 기본", "quota_exceeded": False},
+    {"id": "opus", "label": "Opus 5.5", "note": "복잡한 분석·긴 글", "quota_exceeded": False},
+    {"id": "haiku", "label": "Haiku 5.5", "note": "가장 빠름", "quota_exceeded": False},
+    {"id": "fable", "label": "Fable 5.1", "note": "가장 강력함, 느림", "quota_exceeded": False},
 ]
 MODEL_ID = re.compile(r"^[a-z0-9][a-z0-9.\-]{0,63}$")
 _agy_models: Optional[List[dict]] = None
@@ -292,10 +338,10 @@ def _list_agy_models(exe: str) -> List[dict]:
     try:
         r = subprocess.run([exe, "models"], capture_output=True, timeout=30, stdin=subprocess.DEVNULL)
         rows = [ln.split("\t", 1) for ln in _decode(r.stdout).splitlines() if "\t" in ln]
-        found = [{"id": i.strip(), "label": n.strip()} for i, n in rows if MODEL_ID.match(i.strip())]
+        found = [{"id": i.strip(), "label": n.strip(), "quota_exceeded": False} for i, n in rows if MODEL_ID.match(i.strip())]
     except (OSError, subprocess.TimeoutExpired):
         return []  # 다음에 다시 시도한다
-    _agy_models = [{"id": "", "label": "기본 모델", "note": "Antigravity 설정을 따름"}] + found if found else []
+    _agy_models = [{"id": "", "label": "기본 모델", "note": "Antigravity 설정을 따름", "quota_exceeded": False}] + found if found else []
     return _agy_models
 
 
@@ -304,17 +350,29 @@ def models(cli: Optional[Tuple[str, str]] = None) -> List[dict]:
     if not cli:
         return []
     if cli[0] == "claude":
-        return CLAUDE_MODELS
+        return [dict(m, quota_exceeded=m.get("quota_exceeded", False)) for m in CLAUDE_MODELS]
     if cli[0] == "agy":
-        return _list_agy_models(cli[1])
+        return [dict(m, quota_exceeded=m.get("quota_exceeded", False)) for m in _list_agy_models(cli[1])]
     return []
 
 
 def check_model(model: Optional[str]) -> Optional[str]:
-    """화면에서 고른 모델을 검증한다. 목록에 없으면 None(=CLI 기본 모델)."""
+    """화면에서 고른 모델을 검증한다. 목록에 없거나 한도 초과된 모델이면 None(=CLI 기본 모델)."""
     if not model:
         return None
-    return model if any(m["id"] == model for m in models()) and MODEL_ID.match(model) else None
+    usable = [m["id"] for m in models() if not m.get("quota_exceeded")]
+    return model if model in usable and MODEL_ID.match(model) else None
+
+
+def _format_until(ts: Optional[float]) -> str:
+    """유닉스 초 타임스탬프를 사람이 읽기 편한 'HH:MM' 형태(예: '14:20')로 변환."""
+    if not ts:
+        return ""
+    try:
+        import datetime
+        return datetime.datetime.fromtimestamp(ts).strftime("%H:%M")
+    except Exception:
+        return ""
 
 
 def info() -> dict:
@@ -326,7 +384,8 @@ def info() -> dict:
     cli = find_cli() if available() else None
     if not cli:
         return {"kind": None, "label": "시험용(AI 미연결)", "images": False, "models": []}
-    out = {"kind": cli[0], "label": LABELS.get(cli[0], cli[0]), "images": cli[0] == "agy", "models": models(cli)}
+    curr_models = [dict(m, quota_exceeded=False) for m in models(cli)]
+    out = {"kind": cli[0], "label": LABELS.get(cli[0], cli[0]), "images": cli[0] == "agy", "models": curr_models}
     if not out["images"]:
         sub = find_sub_cli()
         if sub and sub[0] == "agy":
@@ -334,7 +393,27 @@ def info() -> dict:
             out["image_label"] = LABELS["agy"]
     main, until = main_cli(), main_blocked_until()
     if main and until and cli != main:
-        out["fallback"] = {"from": LABELS.get(main[0], main[0]), "until": int(until)}
+        until_str = _format_until(until)
+        fb = {"from": LABELS.get(main[0], main[0]), "until": int(until)}
+        if until_str:
+            fb["until_formatted"] = until_str
+        out["fallback"] = fb
+        main_model_list = models(main) or (CLAUDE_MODELS if main[0] == "claude" else [])
+        note_text = f"한도 초과 ({until_str} 복귀)" if until_str else "한도 초과"
+        prefix = "Claude " if main[0] == "claude" else f"{LABELS.get(main[0], main[0])} "
+        blocked_models = []
+        for m in main_model_list:
+            lbl = m.get("label", "")
+            prefixed_lbl = lbl if lbl.startswith(prefix.strip()) else f"{prefix}{lbl}"
+            blocked_models.append(
+                dict(
+                    m,
+                    label=prefixed_lbl,
+                    quota_exceeded=True,
+                    note=note_text,
+                )
+            )
+        out["models"] = curr_models + blocked_models
     return out
 
 
@@ -361,17 +440,27 @@ def _decode(raw: bytes) -> str:
         return raw.decode("cp949", errors="replace")
 
 
-def _build_cmd(kind: str, exe: str, prompt: str, timeout: int) -> Tuple[List[str], Optional[bytes]]:
+def _extract_effort(model: Optional[str]) -> Optional[str]:
+    if not model:
+        return None
+    m = re.search(r"[-_](low|medium|high)$", model, re.I)
+    return m.group(1).lower() if m else None
+
+
+def _build_cmd(kind: str, exe: str, prompt: str, timeout: int, effort: Optional[str] = None, web: bool = False) -> Tuple[List[str], Optional[bytes]]:
     """(명령, stdin으로 보낼 프롬프트). stdin이 None이면 프롬프트가 인자에 들어 있다(agy는 .exe라 안전)."""
+    eff = effort if effort in ("low", "medium", "high", "xhigh", "max") else "low"
     if kind == "agy":
-        return [exe, "-p", prompt, "--print-timeout", f"{timeout}s", "--effort", "low", "--disable-slash-commands"], None
+        return [exe, "-p", prompt, "--print-timeout", f"{timeout}s", "--effort", eff, "--disable-slash-commands"], None
     stdin = prompt.encode("utf-8")
     if kind == "gemini":
         return [exe, "-p", "Follow the instructions given on stdin."], stdin
     if kind == "claude":
         # 도구·MCP·스킬·사용자 설정(전역 CLAUDE.md)을 모두 꺼서, 개발용 지침이 서비스 답에 섞이거나 도구가 실행되지 않게 한다
-        return [exe, "-p", "--tools", "", "--strict-mcp-config", "--disable-slash-commands",
-                "--no-session-persistence", "--setting-sources", "", "--effort", "low"], stdin
+        # web=True는 조사 전문가용: 읽기 전용 웹 도구(검색·페이지 읽기)만 연다. 파일·셸 도구는 계속 막는다
+        tools = ["--tools", "WebSearch,WebFetch", "--allowedTools", "WebSearch,WebFetch"] if web else ["--tools", ""]
+        return [exe, "-p", *tools, "--strict-mcp-config", "--disable-slash-commands",
+                "--no-session-persistence", "--setting-sources", "", "--effort", eff], stdin
     if kind == "codex":
         return [exe, "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-"], stdin
     raise LLMError(f"지원하지 않는 LLM CLI: {kind}")
@@ -386,11 +475,12 @@ def _image_note(kind: str, names: List[str]) -> str:
     return "\n\n[첨부 이미지] 사용자가 이미지를 첨부했지만 이 AI로는 볼 수 없습니다. 이미지 내용은 알 수 없다고 밝히고, 글로 된 요청만 근거로 답하세요."
 
 
+_AGY_WEB_NOTE = "[중요: 웹 검색과 웹 페이지 읽기 도구만 쓰세요. 파일 읽기·쓰기와 셸 명령(read_file, view_file, run_command 등)은 절대 쓰지 말고, 전역 규칙(GON.md 등)의 파일 읽기도 생략하세요.]\n\n"
 _AGY_TEXT_ONLY_NOTE = "[중요: 도구(read_file, view_file, run_command 등)를 절대 호출하지 말고 텍스트로만 즉시 답하세요. 전역 규칙(GON.md 등)의 파일 읽기도 생략하세요.]\n\n"
 
 
 def _prepare(prompt: str, timeout: int, images: Optional[List[Tuple[str, bytes]]], model: Optional[str] = None,
-             cli: Optional[Tuple[str, str]] = None) -> Tuple[str, List[str], Optional[bytes]]:
+             cli: Optional[Tuple[str, str]] = None, web: bool = False) -> Tuple[str, List[str], Optional[bytes]]:
     """model: 화면에서 고른 모델. 이번에 쓰는 AI의 목록에 있을 때만 붙인다(서브로 넘어가면 그 AI의 기본 모델)."""
     cli = cli or _pick(images)
     if not cli:
@@ -399,8 +489,9 @@ def _prepare(prompt: str, timeout: int, images: Optional[List[Tuple[str, bytes]]
     if images:
         prompt += _image_note(kind, [n for n, _ in images])
     elif kind == "agy":
-        prompt = _AGY_TEXT_ONLY_NOTE + prompt
-    cmd, stdin_bytes = _build_cmd(kind, exe, prompt, timeout)
+        prompt = (_AGY_WEB_NOTE if web else _AGY_TEXT_ONLY_NOTE) + prompt
+    eff = _extract_effort(model)
+    cmd, stdin_bytes = _build_cmd(kind, exe, prompt, timeout, effort=eff, web=web)
     if model and MODEL_ID.match(model) and any(m["id"] == model for m in models(cli)):
         cmd = cmd + ["--model", model]
     return kind, cmd, stdin_bytes
@@ -477,7 +568,7 @@ def _stream_once(prompt: str, timeout: int, images: Optional[List[Tuple[str, byt
         err_chunks: List[bytes] = []
         drain = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
         drain.start()
-        watchdog = threading.Timer(timeout + 15, proc.kill)
+        watchdog = threading.Timer(timeout + 15, kill_tree, args=(proc,))
         watchdog.start()
         try:
             if stdin_bytes is not None:
@@ -534,35 +625,38 @@ def _stream_once(prompt: str, timeout: int, images: Optional[List[Tuple[str, byt
                 proc.wait()
 
 
-def ask(prompt: str, timeout: int = 120, images: Optional[List[Tuple[str, bytes]]] = None, model: Optional[str] = None) -> str:
+def ask(prompt: str, timeout: int = 120, images: Optional[List[Tuple[str, bytes]]] = None, model: Optional[str] = None,
+        via: Optional[str] = None, web: bool = False) -> str:
     """images: (파일 이름, 내용) 목록. 파일 이름은 호출하는 쪽에서 검증한 안전한 이름이어야 한다.
+    web: 조사 전문가용. 읽기 전용 웹 도구(검색·페이지 읽기)를 열어 준다(claude·agy만, codex는 해당 없음).
+    via: 이 일을 맡길 서브 AI('gemini'|'codex'). 서브가 연결돼 있고 이미지가 없을 때만 쓰고, 서브가 실패하면 메인이 같은 일을 한다.
     메인이 한도 오류를 내면 서브로 같은 요청을 다시 한다."""
+    sub = sub_cli_for(via) if via and not images else None
+    if sub:
+        try:
+            return _ask_once(prompt, timeout, None, None, sub, web)  # 화면에서 고른 모델은 메인 AI의 것이라 서브에는 넘기지 않는다
+        except LLMError:
+            pass
     cli = _pick(images)
     try:
-        return _ask_once(prompt, timeout, images, model, cli)
+        return _ask_once(prompt, timeout, images, model, cli, web)
     except LLMError as e:
         nxt = _after_quota(cli, str(e), images)
         if not nxt:
             raise
-        return _ask_once(prompt, timeout, images, model, nxt)
+        return _ask_once(prompt, timeout, images, model, nxt, web)
 
 
 def _ask_once(prompt: str, timeout: int, images: Optional[List[Tuple[str, bytes]]], model: Optional[str],
-              cli: Optional[Tuple[str, str]]) -> str:
-    kind, cmd, stdin_bytes = _prepare(prompt, timeout, images, model, cli)
+              cli: Optional[Tuple[str, str]], web: bool = False) -> str:
+    kind, cmd, stdin_bytes = _prepare(prompt, timeout, images, model, cli, web)
     feed = {"input": stdin_bytes} if stdin_bytes is not None else {"stdin": subprocess.DEVNULL}
     with tempfile.TemporaryDirectory() as empty_dir:
         if images and kind == "agy":
             for name, data in images:
                 Path(empty_dir, name).write_bytes(data)
         try:
-            r = subprocess.run(
-                cmd,
-                capture_output=True,
-                cwd=empty_dir,
-                timeout=timeout + 15,
-                **feed,
-            )
+            r = _run(cmd, cwd=empty_dir, timeout=timeout + 15, **feed)
         except subprocess.TimeoutExpired:
             raise LLMError("응답 시간이 너무 오래 걸렸어요")
     out = _decode(r.stdout).strip()

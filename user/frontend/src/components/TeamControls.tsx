@@ -14,7 +14,7 @@ export const DepthPicker: React.FC<{ value: Depth; onChange: (d: Depth) => void;
   caps,
   disabled,
 }) => (
-  <div role="radiogroup" aria-label="작업 깊이" className="inline-flex h-8 shrink-0 items-center rounded-full bg-sunken p-0.5">
+  <div role="radiogroup" aria-label="작업 깊이" className="inline-flex h-8 shrink-0 items-center rounded-lg bg-sunken p-0.5 border border-line/60">
     {DEPTHS.map((d) => {
       const on = d.id === value;
       const hint = caps ? `전문가 최대 ${caps[d.id]}명${d.id === 'deep' ? ', 시간과 사용량이 늘어요' : ''}` : d.hint;
@@ -27,7 +27,7 @@ export const DepthPicker: React.FC<{ value: Depth; onChange: (d: Depth) => void;
           title={hint}
           disabled={disabled}
           onClick={() => onChange(d.id)}
-          className={`h-7 rounded-full px-2.5 text-xs transition-colors duration-200 ease-out disabled:opacity-50 ${
+          className={`h-7 rounded-[6px] px-2.5 min-w-[42px] text-center text-xs font-medium transition-colors duration-200 ease-out disabled:opacity-50 ${
             on ? 'bg-surface text-ink shadow-sm' : 'text-faint hover:text-ink'
           }`}
         >

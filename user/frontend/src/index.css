@@ -22,6 +22,10 @@
   --c-danger-soft: 251 236 234;
   --glass-bg: rgb(250, 249, 245);
   --glass-edge: rgb(229, 226, 216);
+  --glass-card-bg: rgba(255, 255, 255, 0.78);
+  --glass-card-border: rgba(229, 226, 216, 0.75);
+  --glass-card-shadow: 0 10px 30px -10px rgba(20, 20, 19, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --ambient-glow-color: rgba(193, 95, 60, 0.25);
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
@@ -41,6 +45,10 @@
   --c-danger-soft: 52 28 25;
   --glass-bg: rgb(33, 32, 30);
   --glass-edge: rgb(58, 56, 52);
+  --glass-card-bg: rgba(43, 42, 39, 0.65);
+  --glass-card-border: rgba(58, 56, 52, 0.8);
+  --glass-card-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --ambient-glow-color: rgba(217, 119, 87, 0.32);
 }
 
 @layer base {
@@ -207,4 +215,88 @@
   .glass {
     background-color: var(--glass-bg);
   }
+
+  /* 고품질 글래스모피즘 카드 */
+  .glass-card {
+    background: var(--glass-card-bg);
+    border: 1px solid var(--glass-card-border);
+    box-shadow: var(--glass-card-shadow);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  /* 앰비언트 글로우 유틸리티 */
+  .ambient-glow {
+    position: relative;
+  }
+  .ambient-glow::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    background: radial-gradient(circle at 50% 50%, var(--ambient-glow-color) 0%, transparent 72%);
+    filter: blur(12px);
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0.85;
+    transition: opacity 250ms ease-out;
+  }
+
+  /* 절제된 브랜드 그라디언트 (배경 및 텍스트) */
+  .brand-gradient {
+    background: linear-gradient(135deg, rgb(var(--c-accent)) 0%, rgb(var(--c-accent-hover)) 100%);
+  }
+
+  .brand-gradient-subtle {
+    background: linear-gradient(135deg, rgb(var(--c-surface)) 0%, rgb(var(--c-sunken)) 100%);
+  }
+
+  .brand-gradient-text {
+    background: linear-gradient(135deg, rgb(var(--c-ink)) 15%, rgb(var(--c-accent)) 95%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* 절제된 프리미엄 보더 유틸리티 */
+  .border-subtle {
+    border: 1px solid rgb(var(--c-line) / 0.7);
+  }
+
+  .border-premium {
+    border: 1px solid rgb(var(--c-line));
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.12);
+  }
+
+  /* 미세 광택(Sheen) 인터랙션 효과 */
+  .sheen-effect {
+    position: relative;
+    overflow: hidden;
+  }
+  .sheen-effect::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+      60deg,
+      transparent 38%,
+      rgba(255, 255, 255, 0.22) 50%,
+      transparent 62%
+    );
+    transform: translateX(-120%) rotate(25deg);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+  }
+  .sheen-effect:hover::after {
+    opacity: 1;
+    animation: sheen 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+  }
+}
+
+@keyframes sheen {
+  0% { transform: translateX(-120%) rotate(25deg); }
+  100% { transform: translateX(120%) rotate(25deg); }
 }

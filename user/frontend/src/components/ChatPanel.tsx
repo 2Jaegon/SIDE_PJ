@@ -1,14 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ArrowUp, Square, X, AlertCircle, Plus, Copy, Check, Pencil, RotateCcw, ChevronRight, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowUp, Table2, Square, X, AlertCircle, Plus, Copy, Check, Pencil, RotateCcw, ChevronRight, ChevronDown, Maximize2, Minimize2 } from 'lucide-react';
 import { ActivityFeed } from './ActivityFeed';
 import { ExportActionBar } from './ExportActionBar';
 import { Markdown } from './Markdown';
 import { PromptRecipeCard } from './PromptRecipeCard';
-import { Avatar } from './Avatar';
 import { Mark } from './Mark';
 import type { ExpertItem } from './RosterDrawer';
-import { Depth, LlmInfo, Turn, toDesk } from '../types';
-import { DepthPicker, groupByLens } from './TeamControls';
+import { Depth, InterviewMode, LlmInfo, ModelOption, Turn, toDesk } from '../types';
+import { DepthPicker } from './TeamControls';
+import { InterviewCard, InterviewModePicker, QaSummary, SkillGapCard } from './TeamFlow';
+import { WorkLogModal } from './WorkLog';
 import { ACCEPT, Attachment, MAX_ATTACHMENTS } from '../attachments';
 
 // 대화 화면: claude.ai와 동일한 타이포그래피·여백·입력창 구조.
@@ -50,6 +51,7 @@ interface TurnProps {
   onToggleCard: () => void;
   onRegenerate: () => void;
   onEdit: (text: string) => void;
+  onInterviewAnswer: (answers: Record<string, string> | null) => void;
 }
 
 const UserMessage: React.FC<Pick<TurnProps, 'turn' | 'isLast' | 'busy' | 'onEdit'>> = ({ turn, isLast, busy, onEdit }) => {
@@ -130,6 +132,7 @@ const WorkProcess: React.FC<{ turn: Turn }> = ({ turn }) => {
   const working = !turn.done;
   const lastLine = turn.feed[turn.feed.length - 1];
   const [open, setOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const expanded = open || (working && !turn.answer);
   const summary = working
     ? expanded || !lastLine
@@ -159,48 +162,26 @@ const WorkProcess: React.FC<{ turn: Turn }> = ({ turn }) => {
               ))}
             </ol>
           )}
-          {turn.feed.length > 0 && <ActivityFeed items={turn.feed} />}
-          {experts.length > 0 && (
-            <details className="text-xs">
-              <summary className="cursor-pointer select-none text-faint hover:text-ink transition-colors duration-150 ease-out">
-                전문가별 상세 분석 보기
-              </summary>
-              <div className="mt-2 space-y-4">
-                {groupByLens(experts).map((g) => (
-                  <section key={g.label} className="space-y-3">
-                    <h3 className="text-[11px] font-semibold text-faint">
-                      {g.label} · {g.members.length}명
-                    </h3>
-                    {g.members.map((x) => {
-                      const entry = r?.agent_logs[x.id];
-                      const failed = entry?.status === 'failed';
-                      return (
-                        <article key={x.id}>
-                          <header className="flex items-center gap-2 mb-1">
-                            <Avatar accent={x.accent} name={x.name} size={20} />
-                            <h3 className="font-semibold text-ink">{x.name}</h3>
-                            <span className="text-faint truncate">{x.sub_question || x.task}</span>
-                          </header>
-                          {failed ? (
-                            <p className="text-danger">작업 실패: {entry?.log}</p>
-                          ) : (
-                            <Markdown content={entry?.log || ''} className="!text-xs !leading-6 text-sub" />
-                          )}
-                        </article>
-                      );
-                    })}
-                  </section>
-                ))}
-              </div>
-            </details>
+          {turn.feed.length > 0 && <ActivityFeed items={turn.feed} isLoading={working} />}
+          {r?.qa && <QaSummary report={r.qa} names={Object.fromEntries(experts.map((x) => [x.id, x.name]))} />}
+          {!working && r && experts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setLogOpen(true)}
+              className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-line px-2.5 text-xs font-medium text-sub transition-colors duration-150 ease-out hover:bg-sunken hover:text-ink"
+            >
+              <Table2 className="h-3.5 w-3.5" aria-hidden />
+              작업 기록 표 보기
+            </button>
           )}
         </div>
       )}
+      {logOpen && <WorkLogModal turn={turn} onClose={() => setLogOpen(false)} />}
     </div>
   );
 };
 
-const TurnView: React.FC<TurnProps> = ({ turn, isLast, busy, onToggleCard, onRegenerate, onEdit }) => {
+const TurnView: React.FC<TurnProps> = ({ turn, isLast, busy, onToggleCard, onRegenerate, onEdit, onInterviewAnswer }) => {
   const r = turn.result;
   const team = r ? r.experts.map((x, i) => toDesk(x, i + 1)) : [];
   const answer = r?.final_content ?? turn.answer ?? '';
@@ -215,6 +196,8 @@ const TurnView: React.FC<TurnProps> = ({ turn, isLast, busy, onToggleCard, onReg
       <div className="flex gap-3.5">
         <Mark size={24} className="mt-1 shrink-0" />
         <div className="min-w-0 flex-1">
+          {turn.interview && <InterviewCard state={turn.interview} active={!turn.done && busy && isLast} onAnswer={onInterviewAnswer} />}
+
           {showProcess && <WorkProcess turn={turn} />}
 
           {!turn.done && !answer && route === 'direct' && (
@@ -248,6 +231,12 @@ const TurnView: React.FC<TurnProps> = ({ turn, isLast, busy, onToggleCard, onReg
                   다시 시도
                 </button>
               )}
+            </div>
+          )}
+
+          {r?.skill_gaps && r.skill_gaps.length > 0 && (
+            <div className="mt-3">
+              <SkillGapCard gaps={r.skill_gaps} />
             </div>
           )}
 
@@ -286,13 +275,14 @@ interface ChatThreadProps {
   onToggleCard: (turnId: number) => void;
   onRegenerate: (turnId: number) => void;
   onEdit: (turnId: number, text: string) => void;
+  onInterviewAnswer: (turnId: number, answers: Record<string, string> | null) => void;
 }
 
 // 대화 내용: 비어 있으면 claude.ai 스타일의 첫 인사 화면을 보여 준다.
-export const ChatThread: React.FC<ChatThreadProps> = ({ turns, llm, busy, onToggleCard, onRegenerate, onEdit }) => {
+export const ChatThread: React.FC<ChatThreadProps> = ({ turns, llm: _llm, busy, onToggleCard, onRegenerate, onEdit, onInterviewAnswer }) => {
   const endRef = useRef<HTMLDivElement>(null);
   const last = turns[turns.length - 1];
-  const tick = last ? `${turns.length}:${last.feed.length}:${(last.answer ?? '').length}:${last.done}` : '';
+  const tick = last ? `${turns.length}:${last.feed.length}:${(last.answer ?? '').length}:${last.done}:${last.interview?.status ?? ''}` : '';
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -305,12 +295,6 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ turns, llm, busy, onTogg
           <Mark size={32} />
           <h2 className="text-2xl font-medium tracking-tight text-ink">오늘 어떤 도움을 드릴까요?</h2>
         </div>
-        {llm?.fallback && (
-          <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-xs font-medium text-accent">
-            <span className="w-1.5 h-1.5 rounded-full bg-accent" aria-hidden />
-            {llm.fallback.from} 사용 한도 도달 · 서브 AI({llm.label})로 자동 전환됨
-          </p>
-        )}
       </div>
     );
   }
@@ -327,6 +311,7 @@ export const ChatThread: React.FC<ChatThreadProps> = ({ turns, llm, busy, onTogg
             onToggleCard={() => onToggleCard(t.id)}
             onRegenerate={() => onRegenerate(t.id)}
             onEdit={(text) => onEdit(t.id, text)}
+            onInterviewAnswer={(answers) => onInterviewAnswer(t.id, answers)}
           />
         ))}
         <div ref={endRef} />
@@ -356,9 +341,64 @@ interface ComposerProps {
   depth?: Depth;
   depthCaps?: Record<Depth, number>;
   onDepth?: (d: Depth) => void;
+  interviewMode?: InterviewMode;
+  onInterviewMode?: (m: InterviewMode) => void;
 }
 
-// 모델 고르기: claude.ai 입력창 하단 모델 셀렉터 스타일
+interface EffortMap {
+  low?: string;
+  medium?: string;
+  high?: string;
+}
+
+interface ModelGroup {
+  baseId: string;
+  baseLabel: string;
+  quota_exceeded?: boolean;
+  note?: string;
+  efforts: EffortMap;
+  defaultId: string;
+}
+
+function parseModelItem(m: ModelOption) {
+  const id = m.id || '';
+  const match = id.match(/^(.*?)[-_](low|medium|high)$/i);
+  if (match) {
+    const baseId = match[1];
+    const effort = match[2].toLowerCase() as 'low' | 'medium' | 'high';
+    const baseLabel = m.label.replace(/\s*\((Low|Medium|High)\)\s*$/i, '').trim();
+    return { baseId, effort, baseLabel, id: m.id, quota_exceeded: m.quota_exceeded, note: m.note };
+  }
+  return { baseId: id, effort: null, baseLabel: m.label, id: m.id, quota_exceeded: m.quota_exceeded, note: m.note };
+}
+
+function groupModels(list: ModelOption[]): ModelGroup[] {
+  const groups: ModelGroup[] = [];
+  const map = new Map<string, ModelGroup>();
+
+  for (const m of list) {
+    const parsed = parseModelItem(m);
+    let group = map.get(parsed.baseId);
+    if (!group) {
+      group = {
+        baseId: parsed.baseId,
+        baseLabel: parsed.baseLabel,
+        quota_exceeded: parsed.quota_exceeded,
+        note: parsed.note,
+        efforts: {},
+        defaultId: parsed.id,
+      };
+      map.set(parsed.baseId, group);
+      groups.push(group);
+    }
+    if (parsed.effort) {
+      group.efforts[parsed.effort] = parsed.id;
+    }
+  }
+  return groups;
+}
+
+// 모델 고르기: claude.ai 입력창 하단 모델 셀렉터 스타일 + Low/Mid/High 토글
 const ModelPicker: React.FC<{ llm: LlmInfo | null; model: string; onModel: (id: string) => void; disabled: boolean }> = ({
   llm,
   model,
@@ -368,7 +408,13 @@ const ModelPicker: React.FC<{ llm: LlmInfo | null; model: string; onModel: (id: 
   const [open, setOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const list = llm?.models ?? [];
-  const current = list.find((m) => m.id === model) ?? list[0];
+  const groups = useMemo(() => groupModels(list), [list]);
+
+  // 현재 모델 파싱
+  const currentItem = list.find((m) => m.id === model) ?? list[0];
+  const currentParsed = currentItem ? parseModelItem(currentItem) : null;
+  const currentGroup = groups.find((g) => g.baseId === currentParsed?.baseId) ?? groups[0];
+  const currentEffort = currentParsed?.effort ?? (currentGroup?.efforts.high ? 'high' : currentGroup?.efforts.medium ? 'medium' : currentGroup?.efforts.low ? 'low' : null);
 
   useEffect(() => {
     if (!open) return;
@@ -388,14 +434,18 @@ const ModelPicker: React.FC<{ llm: LlmInfo | null; model: string; onModel: (id: 
     return (
       <span className="min-w-0 truncate text-xs font-medium text-sub inline-flex items-center gap-1.5" title="연결된 AI">
         <span>{llm?.label}</span>
-        {llm?.fallback && (
-          <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent">
-            {llm.fallback.from} 한도 소진 → 서브 전환
-          </span>
-        )}
       </span>
     );
   }
+
+  const isFallback = Boolean(llm?.fallback);
+  const buttonTitle = disabled
+    ? '답을 받는 동안에는 바꿀 수 없어요'
+    : isFallback
+      ? `${llm?.fallback?.from} 한도 초과 상태 (클릭하여 확인)`
+      : '모델 고르기';
+
+  const hasEffortOptions = currentGroup && Object.keys(currentGroup.efforts).length > 0;
 
   return (
     <div ref={boxRef} className="relative min-w-0 inline-flex items-center gap-1.5">
@@ -405,58 +455,163 @@ const ModelPicker: React.FC<{ llm: LlmInfo | null; model: string; onModel: (id: 
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`모델 고르기, 지금: ${current?.label}`}
-        title={disabled ? '답을 받는 동안에는 바꿀 수 없어요' : '모델 고르기'}
-        className="inline-flex h-7 max-w-full items-center gap-1 rounded-lg px-2 text-xs font-medium text-sub hover:bg-sunken hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent transition-colors duration-150 ease-out"
+        aria-label={`모델 고르기, 지금: ${currentGroup?.baseLabel || '기본 모델'}`}
+        title={buttonTitle}
+        className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-sub hover:bg-sunken hover:text-ink disabled:opacity-50 disabled:hover:bg-transparent transition-colors duration-150 ease-out"
       >
         <span className="truncate">
-          {llm?.label} · {current?.label}
+          {currentGroup?.baseLabel || '기본 모델'}
+          {currentEffort && (
+            <span className="ml-1 text-[10px] text-faint font-normal">
+              ({currentEffort === 'low' ? 'Low' : currentEffort === 'medium' ? 'Mid' : 'High'})
+            </span>
+          )}
         </span>
         <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ease-out ${open ? 'rotate-180' : ''}`} aria-hidden />
       </button>
-      {llm?.fallback && (
-        <span
-          className="hidden sm:inline-flex items-center rounded bg-accent-soft px-1.5 py-0.5 text-[11px] font-medium text-accent shrink-0"
-          title={`${llm.fallback.from} 사용 한도에 도달해 서브 AI(${llm.label})로 자동 전환되었습니다.`}
-        >
-          {llm.fallback.from} 한도 소진 → 서브 전환
+
+      {currentGroup?.quota_exceeded && (
+        <span className="text-[11px] font-semibold text-danger shrink-0">
+          한도 초과
         </span>
       )}
+
       {open && (
-        <ul
+        <div
           role="listbox"
           aria-label="모델"
-          className="absolute bottom-full left-0 z-20 mb-2 max-h-72 w-64 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-xl anim-rise"
+          className="absolute bottom-full left-0 z-20 mb-2 max-h-80 w-72 overflow-y-auto rounded-xl border border-line bg-surface p-1.5 shadow-xl anim-rise"
         >
-          {list.map((m) => {
-            const selected = m.id === current?.id;
+          {llm?.fallback && (
+            <div className="px-3 py-2 border-b border-line bg-danger/5 rounded-t-lg mb-1 flex items-center justify-between">
+              <span className="text-xs text-danger font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                {llm.fallback.from} 한도 초과
+              </span>
+              <span className="text-[11px] text-faint font-mono">
+                {llm.fallback.until_formatted ? `${llm.fallback.until_formatted} 복귀` : '일시 제한'}
+              </span>
+            </div>
+          )}
+
+          {/* 모델 드롭다운 상세: 상단 추론 강도(Effort) 제어 세그먼트 */}
+          {hasEffortOptions && (
+            <div className="px-2.5 py-1.5 mb-1.5 border-b border-line/70 bg-sunken/40 rounded-lg flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-sub">추론 강도</span>
+              <div
+                role="group"
+                aria-label="추론 강도 (Effort)"
+                className="inline-flex items-center h-6 rounded-md bg-sunken p-0.5 border border-line/60 shrink-0"
+              >
+                {(['low', 'medium', 'high'] as const).map((lvl) => {
+                  const targetId = currentGroup.efforts[lvl];
+                  const isSupported = Boolean(targetId);
+                  const isSelected = currentEffort === lvl;
+                  const label = lvl === 'low' ? 'Low' : lvl === 'medium' ? 'Mid' : 'High';
+
+                  return (
+                    <button
+                      key={lvl}
+                      type="button"
+                      disabled={disabled || !isSupported || isSelected}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (targetId && !isSelected) {
+                          onModel(targetId);
+                        }
+                      }}
+                      title={
+                        !isSupported
+                          ? `${currentGroup.baseLabel}은(는) ${label} 강도를 지원하지 않아요`
+                          : `${label} 강도로 전환`
+                      }
+                      className={`h-5 px-2 text-[10px] font-medium rounded transition-all duration-150 ease-out ${
+                        isSelected
+                          ? 'bg-surface text-ink font-semibold shadow-2xs border border-line/50'
+                          : isSupported
+                            ? 'text-faint hover:text-ink hover:bg-surface/50'
+                            : 'text-faint/30 cursor-not-allowed'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <ul className="space-y-0.5">
+          {llm?.fallback && (
+            <div className="px-3 py-2 border-b border-line bg-danger/5 rounded-t-lg mb-1 flex items-center justify-between">
+              <span className="text-xs text-danger font-semibold flex items-center gap-1.5">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" aria-hidden />
+                {llm.fallback.from} 한도 초과
+              </span>
+              <span className="text-[11px] text-faint font-mono">
+                {llm.fallback.until_formatted ? `${llm.fallback.until_formatted} 복귀` : '일시 제한'}
+              </span>
+            </div>
+          )}
+          {groups.map((g) => {
+            const isSelectedGroup = g.baseId === currentGroup?.baseId;
+            const isExceeded = Boolean(g.quota_exceeded);
+            const returnTimeStr = llm?.fallback?.until_formatted ? `${llm.fallback.until_formatted} 복귀` : '';
+            const noteContent = isExceeded
+              ? (g.note?.includes('복귀') ? g.note : returnTimeStr ? `한도 초과 (${returnTimeStr})` : (g.note || '한도 초과'))
+              : g.note;
+
             return (
-              <li key={m.id || 'default'} role="option" aria-selected={selected}>
+              <li key={g.baseId || 'default'} role="option" aria-selected={isSelectedGroup}>
                 <button
                   type="button"
+                  disabled={isExceeded}
                   onClick={() => {
-                    onModel(m.id);
+                    if (isExceeded) return;
+                    const candidate =
+                      currentEffort && g.efforts[currentEffort]
+                        ? g.efforts[currentEffort]
+                        : g.efforts.high || g.efforts.medium || g.efforts.low || g.defaultId;
+                    onModel(candidate);
                     setOpen(false);
                   }}
-                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left hover:bg-sunken transition-colors duration-150 ease-out ${
-                    selected ? 'bg-sunken' : ''
+                  title={isExceeded ? `${g.baseLabel}: 일일/사용 한도가 초과되어 지금은 선택할 수 없어요` : g.baseLabel}
+                  className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors duration-150 ease-out ${
+                    isExceeded
+                      ? 'opacity-50 cursor-not-allowed bg-transparent'
+                      : isSelectedGroup
+                        ? 'bg-sunken'
+                        : 'hover:bg-sunken'
                   }`}
                 >
                   <span className="min-w-0 flex-1">
-                    <span className="block text-xs font-medium text-ink">{m.label}</span>
-                    {m.note && <span className="block text-[11px] text-faint mt-0.5">{m.note}</span>}
+                    <span className="flex items-center justify-between gap-1.5">
+                      <span className={`block text-xs font-medium ${isExceeded ? 'text-faint line-through' : 'text-ink'}`}>
+                        {g.baseLabel}
+                      </span>
+                      {isExceeded && (
+                        <span className="shrink-0 text-[11px] font-semibold text-danger">
+                          한도 초과
+                        </span>
+                      )}
+                    </span>
+                    {noteContent && (
+                      <span className={`block text-[11px] mt-0.5 ${isExceeded ? 'text-danger/80' : 'text-faint'}`}>
+                        {noteContent}
+                      </span>
+                    )}
                   </span>
-                  {selected && <Check className="mt-0.5 w-3.5 h-3.5 shrink-0 text-accent" aria-hidden />}
+                  {isSelectedGroup && <Check className="mt-0.5 w-3.5 h-3.5 shrink-0 text-accent" aria-hidden />}
                 </button>
               </li>
             );
           })}
-        </ul>
+          </ul>
+        </div>
       )}
     </div>
   );
 };
-
 // 입력창: claude.ai 플로팅 입력 카드 디자인
 export const Composer: React.FC<ComposerProps> = ({
   isLoading,
@@ -479,6 +634,8 @@ export const Composer: React.FC<ComposerProps> = ({
   depth,
   depthCaps,
   onDepth,
+  interviewMode,
+  onInterviewMode,
 }) => {
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -497,6 +654,30 @@ export const Composer: React.FC<ComposerProps> = ({
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [draft]);
+
+  // 빠르게/보통/깊게 선택 시 모델 추론강도 자동 동기화 핸들러
+  const handleDepthChange = (newDepth: Depth) => {
+    onDepth?.(newDepth);
+
+    const effortMap: Record<Depth, 'low' | 'medium' | 'high'> = {
+      fast: 'low',
+      normal: 'medium',
+      deep: 'high',
+    };
+    const targetEffort = effortMap[newDepth];
+    const list = llm?.models ?? [];
+    const groups = groupModels(list);
+    const currentItem = list.find((m) => m.id === model) ?? list[0];
+    const currentParsed = currentItem ? parseModelItem(currentItem) : null;
+    const currentGroup = groups.find((g) => g.baseId === currentParsed?.baseId) ?? groups[0];
+
+    if (currentGroup && currentGroup.efforts[targetEffort]) {
+      const targetModelId = currentGroup.efforts[targetEffort];
+      if (targetModelId && targetModelId !== model) {
+        onModel(targetModelId);
+      }
+    }
+  };
 
   const send = () => {
     if (canSend) onSend();
@@ -623,7 +804,8 @@ export const Composer: React.FC<ComposerProps> = ({
             </button>
             <div className="min-w-0 flex-1 flex items-center gap-1.5">
               <ModelPicker llm={llm} model={model} onModel={onModel} disabled={isLoading} />
-              {depth && onDepth && <DepthPicker value={depth} onChange={onDepth} caps={depthCaps} disabled={isLoading} />}
+              {depth && onDepth && <DepthPicker value={depth} onChange={handleDepthChange} caps={depthCaps} disabled={isLoading} />}
+              {interviewMode && onInterviewMode && <InterviewModePicker value={interviewMode} onChange={onInterviewMode} disabled={isLoading} />}
             </div>
             {onToggleExpand && (
               <button

@@ -38,12 +38,30 @@ NAMES = {
     "ecc-verification": "검증 루프 담당", "ecc-coding-standards": "코딩 표준 담당", "ecc-fastapi": "FastAPI 설계자",
     "ecc-react": "React 설계자", "ecc-a11y": "접근성 담당", "ecc-api-design": "API 설계자",
     "ecc-code-review": "코드 리뷰어", "ecc-security-review": "보안 리뷰어", "ecc-e2e": "E2E 테스트 담당", "ecc-git": "형상 관리 담당", "skill-observer": "스킬 개선 관찰자",
-    "agency-agents": "직무 페르소나 전문가",
+    "agency-agents": "직무 페르소나 전문가", "grill-me": "요구사항 인터뷰어",
 }
+# 프롬프트 파일 하나가 전문가 한 명이다: 파일 이름 -> (직함, 용도, 분야, 편성 대체용 트리거)
 PROMPT_EXPERTS = {
-    "기업분석": ("기업·직무 분석가", "기업과 직무를 채용 컨설턴트·현직자·산업 애널리스트 관점으로 분석"),
-    "천재적_사고": ("창의적 사고 코치", "질문에 맞는 사고법을 골라 아이디어를 확장하고 구조화"),
-    "지식화": ("프롬프트 지식화 전문가", "사용자의 요청을 구조화된 프롬프트와 지식으로 정리"),
+    "기업분석": ("기업·직무 분석가", "기업과 직무를 채용 컨설턴트·현직자·산업 애널리스트 관점으로 분석", "prompt",
+              ["기업분석", "직무", "채용", "지원", "자소서", "면접"]),
+    "천재적_사고": ("창의적 사고 코치", "질문에 맞는 사고법을 골라 아이디어를 확장하고 구조화", "prompt",
+                ["아이디어", "브레인스토밍", "발상", "창의"]),
+    "지식화": ("프롬프트 지식화 전문가", "사용자의 요청을 구조화된 프롬프트와 지식으로 정리", "prompt",
+            ["프롬프트", "지식화", "정리", "구조화"]),
+    "루프엔지니어링": ("반복 업무 스킬화 담당", "반복하는 일을 인터뷰로 뽑아 SKILL.md와 검증 항목으로 만든다", "meta",
+                 ["반복", "자동화", "스킬 만들", "매뉴얼", "워크플로우"]),
+    "자기개선": ("자가 점검 코치", "작업 결과를 의도·간결성·실무 적합성 기준으로 점검하고 개선 지침으로 되돌린다", "verify",
+              ["자가 점검", "회고", "개선", "리뷰"]),
+    "자료분석_대본생성": ("쇼츠 대본 작가", "소재를 분석해 지식 쇼츠 대본의 구조와 문장 공식을 적용한다", "write",
+                  ["쇼츠", "대본", "스크립트", "유튜브", "릴스"]),
+    "대본_이미지화": ("영상 클립 프롬프트 작가", "대본을 클립별 이미지·영상 생성 프롬프트로 바꾼다", "visual",
+                 ["클립", "영상 프롬프트", "이미지 프롬프트", "썸네일", "장면"]),
+    "색감조합": ("비주얼 레퍼런스 디렉터", "에디토리얼 히어로 UI 시안의 색감·구도 프롬프트를 쓴다", "visual",
+              ["색감", "팔레트", "히어로", "시안", "무드보드"]),
+    "화면디자인": ("3D 효과 컴포넌트 큐레이터", "originkit 3D 배경·효과 컴포넌트를 골라 화면에 붙인다", "design",
+               ["3d 효과", "배경 효과", "파티클", "originkit", "랜딩"]),
+    "orbs": ("오브 상태 표시 개발자", "ThinkingOrb로 AI 작업 상태(검색·해결·연결)를 보여 주는 UI를 만든다", "motion",
+             ["오브", "orb", "상태 표시", "로딩 표시"]),
 }
 CLUSTER_KO = {
     "build": "개발", "plan": "기획", "write": "글쓰기", "design": "디자인", "motion": "모션",
@@ -76,7 +94,7 @@ def load_pool() -> Dict[str, Dict[str, Any]]:
                 continue
             pool[s["id"]] = {
                 "id": s["id"],
-                "name": NAMES.get(s["id"], s["id"]),
+                "name": NAMES.get(s["id"]) or s.get("name") or s["id"],
                 "kind": "skill",
                 "cluster": s["cluster"],
                 "use_for": s["use_for"],
@@ -86,12 +104,12 @@ def load_pool() -> Dict[str, Dict[str, Any]]:
                 "core": s.get("core", ""),
                 "entry": (REPOS / s["entry"]) if s["status"] != "local" else (ROOT / s["entry"]),
             }
-    for fname, (title, use_for) in PROMPT_EXPERTS.items():
+    for fname, (title, use_for, cluster, triggers) in PROMPT_EXPERTS.items():
         f = PROMPTS / f"{fname}.md"
         if f.exists():
             pid = f"prompt-{fname}"
-            pool[pid] = {"id": pid, "name": title, "kind": "prompt", "cluster": "prompt", "use_for": use_for,
-                         "triggers": [], "synergy": [], "guard": "", "core": "", "entry": f}
+            pool[pid] = {"id": pid, "name": title, "kind": "prompt", "cluster": cluster, "use_for": use_for,
+                         "triggers": triggers, "synergy": [], "guard": "", "core": "", "entry": f}
     for e in pool.values():
         e["accent"] = CLUSTER_ACCENT.get(e["cluster"], "slate")
     return pool

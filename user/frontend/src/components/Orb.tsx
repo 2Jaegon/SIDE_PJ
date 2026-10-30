@@ -1,4 +1,5 @@
 import React from 'react';
+import { ThinkingOrb, OrbState } from 'thinking-orbs';
 
 export type Phase = 'connect' | 'plan' | 'work' | 'synth';
 
@@ -7,6 +8,19 @@ export interface LiveProgress {
   total: number; // 편성된 전문가 수
   done: number; // 결과를 낸 전문가 수
 }
+
+const phaseToOrbState = (phase: Phase): OrbState => {
+  switch (phase) {
+    case 'connect':
+      return 'connecting';
+    case 'plan':
+      return 'searching';
+    case 'work':
+      return 'working';
+    case 'synth':
+      return 'weaving';
+  }
+};
 
 const label = (p: LiveProgress) => {
   switch (p.phase) {
@@ -21,29 +35,38 @@ const label = (p: LiveProgress) => {
   }
 };
 
-// 작업 표시 오브. 단계에 따라 숨 쉬는 속도가 달라지고, 일하는 전문가 수만큼 궤도 점이 돈다.
-export const Orb: React.FC<{ progress: LiveProgress }> = ({ progress }) => {
-  const { phase, total, done } = progress;
-  const working = phase === 'work' ? Math.max(total - done, 0) : 0;
-  const speed = phase === 'work' ? '1.6s' : phase === 'synth' ? '1.1s' : '2.6s';
+export interface OrbProps {
+  progress?: LiveProgress;
+  state?: OrbState;
+  size?: 64 | 32 | 20;
+  dark?: boolean;
+  speed?: number;
+  className?: string;
+}
+
+// 작업 표시 오브. thinking-orbs 공식 라이브러리를 채택하여 단계별 수작업 애니메이션 상태를 렌더링한다.
+export const Orb: React.FC<OrbProps> = ({
+  progress,
+  state: stateProp,
+  size = 64,
+  dark = true,
+  speed = 1,
+  className = '',
+}) => {
+  const orbState: OrbState = stateProp || (progress ? phaseToOrbState(progress.phase) : 'breathing');
+
+  if (!progress) {
+    return (
+      <div className={`inline-flex items-center justify-center ${className}`}>
+        <ThinkingOrb state={orbState} size={size} dark={dark} speed={speed} />
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-3.5" role="status" aria-live="polite">
-      <div className="orb relative w-14 h-14 shrink-0" style={{ ['--orb-speed' as string]: speed }} aria-hidden>
-        <span className="orb-ring absolute inset-0 rounded-full border border-accent/40" />
-        <span className="orb-ring orb-ring-2 absolute inset-0 rounded-full border border-accent/30" />
-        <span className="orb-core absolute inset-2.5 rounded-full" />
-        {working > 0 && (
-          <span className="orb-orbit absolute inset-0">
-            {Array.from({ length: Math.min(working, 8) }, (_, i) => (
-              <span
-                key={i}
-                className="absolute left-1/2 top-1/2 w-1.5 h-1.5 -ml-[3px] -mt-[3px] rounded-full bg-accent"
-                style={{ transform: `rotate(${(360 / Math.min(working, 8)) * i}deg) translateY(-26px)` }}
-              />
-            ))}
-          </span>
-        )}
+    <div className={`flex items-center gap-3.5 ${className}`} role="status" aria-live="polite">
+      <div className="relative shrink-0 flex items-center justify-center" aria-hidden>
+        <ThinkingOrb state={orbState} size={size} dark={dark} speed={progress.phase === 'synth' ? 1.3 : speed} />
       </div>
       <p className="text-sm text-ink">{label(progress)}</p>
     </div>
