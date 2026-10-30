@@ -56,7 +56,7 @@ flowchart TD
 |---|---|---|
 | `GON_LLM` | `auto` | `auto`는 Antigravity `agy`만 쓴다. `stub`이면 AI 호출 없이 모의 응답. 다른 구독을 조용히 쓰지 않도록 `gemini`·`claude`·`codex`는 직접 지정했을 때만 쓰고, 프롬프트는 stdin으로 넘긴다 |
 | `GON_LLM_WORKERS` | `4` | 전문가 병렬 작업 동시 호출 스레드 수 |
-| `GON_MAX_EXPERTS` | `8` | 한 요청에 배정할 수 있는 최대 전문가 인원수 |
+| `GON_MAX_EXPERTS` | `16` | 깊이(빠르게 4·보통 8·깊게 16)와 무관하게 한 요청에 배정할 수 있는 절대 상한 |
 | `AGY_PATH` | (자동 감지) | Antigravity CLI(`agy` 또는 `agy.exe`) 실행 파일 절대 경로 직접 지정 |
 
 ---

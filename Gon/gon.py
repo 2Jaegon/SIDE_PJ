@@ -2,8 +2,9 @@
 Gon CLI — 스킬 라우팅, 지연 설치, 메모리, 전역 /gon 등록을 한 파일로.
 
     python Gon/gon.py catalog            스킬 목록(id | 용도). AI가 요구사항을 분석해 여기서 고른다
-    python Gon/gon.py pick <id> [id…]    고른 스킬의 경로 출력 (없는 저장소는 자동으로 받고, 항상 적용 핵심을 덧붙임)
+    python Gon/gon.py pick <id> [id…]    고른 스킬의 경로 출력 (없는 저장소는 자동으로 받고, 항상 적용 핵심을 덧붙임). --dev는 개발 코어·코드·UI 스킬을 전부 붙임
     python Gon/gon.py fetch <id|all>     스킬 저장소 받기 (shallow)
+    python Gon/gon.py skills-sync        레지스트리 스킬 전부를 이 프로젝트의 Claude Code 스킬(.claude/skills)로 등록 (본문은 경로로 가리킴)
     python Gon/gon.py remember "<사실>"  장기 메모리에 한 줄 추가
     python Gon/gon.py recent [n]         작업 시작 전: 최근 이력·커밋·미커밋 변경·개발자 코어 스킬을 한 번에 본다
     python Gon/gon.py log --by claude|gemini "<한 줄>"   작업 끝: 이력에 한 줄 추가 (미커밋 변경 파일 자동 첨부)
@@ -115,6 +116,22 @@ def fetch(names: list[str]) -> list[str]:
     return failed
 
 
+def missing_repos() -> list[str]:
+    """repos.json에 있는데 아직 받지 않았거나 비어 있는 저장소."""
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    return [n for n in manifest if not (REPOS / n).is_dir() or not any((REPOS / n).iterdir())]
+
+
+def fetch_missing() -> list[str]:
+    """빠진 저장소를 모두 받는다. 실패한 이름을 돌려준다."""
+    for n in missing_repos():
+        shutil.rmtree(REPOS / n, ignore_errors=True)  # 빈 폴더는 fetch가 '있음'으로 보고 건너뛴다
+    todo = missing_repos()
+    if todo:
+        print(f"[gon] 스킬 저장소 {len(todo)}개를 받는다 (처음 한 번, 몇 분 걸릴 수 있다)", file=sys.stderr)
+    return fetch(todo)
+
+
 # ---------- catalog / pick ----------
 # 스킬 선택은 키워드 매칭이 아니라 AI(이 프로토콜을 읽는 모델)가 요구사항을 분석해 정한다.
 # catalog는 선택지를 보여 주고, pick은 고른 스킬의 경로를 돌려준다.
@@ -138,6 +155,8 @@ def cmd_catalog() -> int:
 
 def cmd_pick(ids: list[str]) -> int:
     registry = load()
+    if "--dev" in ids:  # 개발 환경: 개발 코어와 코드·UI 작업 스킬을 고르지 않아도 전부 붙인다
+        ids = [i for i in ids if i != "--dev"] + [s["id"] for s in registry.values() if s.get("core") in ("dev", "project")]
     unknown = [i for i in ids if i not in registry or registry[i]["status"] == "external"]
     if unknown:
         print(f"[gon] 없는 스킬: {unknown} (python Gon/gon.py catalog 로 목록 확인)", file=sys.stderr)
@@ -155,8 +174,9 @@ def cmd_pick(ids: list[str]) -> int:
         return f"{tag}{s['id']} | {s['use_for']} | {p}{flag}{guard}"
 
     # 토큰 절약: 한 스킬당 한 줄. 항상 적용 핵심은 지침 발췌를 바로 붙인다.
+    core_tag = {"dev": "[개발 코어] ", "project": "[코드·UI 작업] "}
     for s in chain:
-        print(line(s, ""))
+        print(line(s, core_tag.get(s.get("core"), "")))
     for s in always:
         print(line(s, "[핵심-항상] "))
         p = entry_path(s)
@@ -164,6 +184,70 @@ def cmd_pick(ids: list[str]) -> int:
             print(f"    > {excerpt(p)}")
     if failed:
         print(f"[gon] fetch 실패: {failed}", file=sys.stderr)
+    return 0
+
+
+# ---------- Claude Code 스킬 등록 ----------
+# 레지스트리 스킬마다 .claude/skills/<id>/SKILL.md 안내 파일을 만든다. 본문은 복사하지 않고 경로만 가리킨다(ECC처럼 큰 저장소를 중복하지 않으려고).
+# .claude/skills는 gitignore라 PC마다 `skills-sync`(install이 함께 실행)로 만든다.
+
+CLAUDE_SKILLS = HOME / ".claude" / "skills"
+STUB_MARK = "<!-- gon-skill-stub -->"
+
+
+def skill_stub(s: dict) -> str:
+    p = entry_path(s)
+    try:
+        rel = os.path.relpath(p, HOME).replace("\\", "/")
+    except ValueError:  # 다른 드라이브
+        rel = str(p)
+    notes = []
+    if repo := repo_of(s):
+        notes.append(f"파일이 없으면 `python -I Gon/gon.py fetch {repo}`로 받는다.")
+    if p.is_dir():
+        notes.append("폴더다. 필요한 하위 스킬을 grep으로 찾아 SKILL.md 하나만 연다.")
+    elif p.name.lower() not in ("skill.md", "skill-instructions.md"):
+        notes.append("개요 문서일 수 있다. 세부 스킬이 있으면 같은 저장소에서 grep으로 찾아 해당 파일만 연다.")
+    if s.get("guard"):
+        notes.append(f"주의: {s['guard']}")
+    desc = f"{s['use_for']} (Gon 스킬 풀: {s['id']})"
+    body = "\n".join(f"- {n}" for n in notes)
+    return (
+        f"---\nname: {s['id']}\ndescription: {json.dumps(desc, ensure_ascii=False)}\n---\n{STUB_MARK}\n"
+        f"Gon 스킬 풀의 스킬이다. 이 파일은 `python -I Gon/gon.py skills-sync`가 만든 안내이고, 지침 본문은 아래 파일에 있다.\n\n"
+        f"- 지침 파일: `{rel}` (저장소 루트 기준). 읽고 그대로 따른다.\n{body}\n"
+    )
+
+
+def sync_skills(dest: Path | None = None) -> tuple[list[str], list[str]]:
+    """(만든 id, 이미 진짜 스킬이 있어 건너뛴 id). 레지스트리에서 빠진 옛 안내 파일은 지운다."""
+    dest = dest or CLAUDE_SKILLS
+    written, skipped = [], []
+    for s in load().values():
+        p = entry_path(s)
+        if p is None:
+            continue
+        # 같은 이름이거나, 같은 스킬(entry 폴더 이름)이 이미 진짜 스킬로 깔려 있으면 건드리지 않는다
+        taken = [dest / s["id"], dest / p.parent.name]
+        if any((t / "SKILL.md").exists() and STUB_MARK not in (t / "SKILL.md").read_text(encoding="utf-8", errors="replace") for t in taken):
+            skipped.append(s["id"])
+            continue
+        (dest / s["id"]).mkdir(parents=True, exist_ok=True)
+        (dest / s["id"] / "SKILL.md").write_text(skill_stub(s), encoding="utf-8")
+        written.append(s["id"])
+    for d in dest.iterdir() if dest.is_dir() else []:
+        f = d / "SKILL.md"
+        if d.name not in written and f.is_file() and STUB_MARK in f.read_text(encoding="utf-8", errors="replace"):
+            shutil.rmtree(d)
+    return written, skipped
+
+
+def cmd_skills_sync() -> int:
+    written, skipped = sync_skills()
+    print(f"Claude Code 스킬 {len(written)}개 등록: {CLAUDE_SKILLS}")
+    if skipped:
+        print(f"이미 진짜 스킬이 있어 건너뜀: {', '.join(skipped)}")
+    print("새 스킬은 Claude Code를 다시 시작하거나 새 세션에서 보인다.")
     return 0
 
 
@@ -233,10 +317,15 @@ def cmd_recent(n: int = 10) -> int:
     always_ids = [s["id"] for s in registry.values() if s.get("core") == "always"]
     dev_ids = [s["id"] for s in registry.values() if s.get("core") == "dev"]
     proj_ids = [s["id"] for s in registry.values() if s.get("core") == "project"]
-    print("\n## 개발자 코어 스킬 (작업 단계별 적용 — python Gon/gon.py pick <id>)")
+    print("\n## 개발자 코어 스킬 (코드를 고치는 일이면 `python -I Gon/gon.py pick --dev`로 전부 붙인다)")
     print(f"  [항상 적용]   {', '.join(always_ids)}")
     print(f"  [개발 코어]   {', '.join(dev_ids)}  (착수: graphify·context7 | 워크플로: ecc | 감사·압축: ponytail·headroom). 반론 검증 court는 중요한 결정에만")
     print(f"  [코드·UI 작업] {', '.join(proj_ids)}")
+
+    todo = missing_repos()
+    if todo:
+        print(f"\n## 스킬 저장소 미설치 {len(todo)}개 — 지금 `python -I Gon/gon.py fetch all`을 백그라운드로 실행한다")
+        print("  " + ", ".join(todo))
 
     groups = open_observations()
     if groups:
@@ -380,7 +469,7 @@ def command_body(arg: str) -> str:
     return (
         f"지금부터 이 요청을 Gon으로서 수행한다: {arg}\n\n"
         f"1. `{GON / 'GON.md'}`를 읽고 그대로 따른다. Gon 홈은 `{HOME}`이다.\n"
-        f"2. `python -I \"{GON / 'gon.py'}\" recent`를 먼저 실행해 최근 이력과 개발자 코어 스킬(karpathy, ecc, ponytail, graphify, context7 등)을 확인한다.\n"
+        f"2. `python -I \"{GON / 'gon.py'}\" recent`를 먼저 실행해 최근 이력과 개발자 코어 스킬(karpathy, ecc, ponytail, graphify, context7 등)을 확인한다. 출력에 '스킬 저장소 미설치'가 있으면 `python -I \"{GON / 'gon.py'}\" fetch all`을 백그라운드로 실행해 전부 받는다.\n"
         "3. 현재 작업 디렉토리는 사용자의 프로젝트다. 산출물은 그곳에 만들고, Gon 홈에는 메모리·스킬만 기록한다.\n"
         f"4. 요청이 비어 있으면 `python -I \"{GON / 'gon.py'}\" doctor`로 상태를 점검하고, 서비스가 꺼져 있으면 `python -I \"{GON / 'gon.py'}\" run --no-open`을 백그라운드로 실행한 뒤 무엇을 할지 한 줄로 물어본다.\n"
     )
@@ -413,6 +502,30 @@ def load_choice() -> list[str] | None:
     except (OSError, ValueError, KeyError):
         return None
     return [n for n in names if n in TOOLS] or None
+
+
+def load_main() -> str | None:
+    """메인 AI: 서비스의 모든 대화가 가는 AI. 나머지 고른 도구는 서브 AI다."""
+    names = load_choice()
+    if not names:
+        return None
+    try:
+        main = json.loads(CHOICE.read_text(encoding="utf-8")).get("main")
+    except (OSError, ValueError):
+        main = None
+    return main if main in names else names[0]
+
+
+def parse_main(args: list[str], names: list[str]) -> str | None:
+    """--main <이름>. 없으면 저장된 메인, 그것도 없으면 목록의 첫 번째. 목록에 없는 이름이면 None."""
+    if "--main" in args and args.index("--main") + 1 < len(args):
+        main = args[args.index("--main") + 1].strip().lower()
+        if main not in names:
+            print(f"[gon] 메인 AI({main})는 --tools 목록({', '.join(names)}) 안에 있어야 한다", file=sys.stderr)
+            return None
+        return main
+    saved = load_main()
+    return saved if saved in names else names[0]
 
 
 def parse_tools(args: list[str]) -> tuple[list[str] | None, bool]:
@@ -457,7 +570,12 @@ def choose_tools(args: list[str]) -> list[str] | None:
         names, ok = parse_tools(["--tools", answer]) if answer else (found, True)
         if not ok or not names:
             return None
-    CHOICE.write_text(json.dumps({"tools": names}, ensure_ascii=False) + "\n", encoding="utf-8")
+    main = parse_main(args, names)
+    if main is None:
+        return None
+    CHOICE.write_text(json.dumps({"tools": names, "main": main}, ensure_ascii=False) + "\n", encoding="utf-8")
+    subs = [n for n in names if n != main]
+    print(f"[gon] 메인 AI: {main} (서비스 대화가 여기로 간다) | 서브 AI: {', '.join(subs) or '없음'}")
     return names
 
 
@@ -474,6 +592,9 @@ def cmd_install(args: list[str] | None = None) -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(body, encoding="utf-8")
             print(f"등록: {path}")
+    if failed := fetch_missing():
+        print(f"[gon] 받지 못한 저장소: {failed} (네트워크 확인 후 python Gon/gon.py fetch all)", file=sys.stderr)
+    cmd_skills_sync()
     return cmd_doctor()
 
 
@@ -520,6 +641,10 @@ def cmd_run(open_browser: bool = True) -> int:
         print("[gon] 프론트엔드 패키지 설치 중...")
         if subprocess.run([npm, "install"], cwd=fe).returncode:
             return 1
+
+    # 서비스의 전문가 팀도 같은 스킬 풀을 쓰므로 빠진 저장소를 먼저 받는다. 실패해도 서비스는 띄운다.
+    if failed := fetch_missing():
+        print(f"[gon] 받지 못한 저장소: {failed} (해당 스킬 없이 시작)")
 
     # 2) 포트: 이전 서버가 남아 있으면 옛 코드가 응답한다 (화면이 안 뜨는 원인이 된 적 있음)
     busy = [p for p in (BACKEND_PORT, FRONTEND_PORT) if port_busy(p)]
@@ -625,18 +750,26 @@ def cmd_always(on: bool, args: list[str] | None = None) -> int:
 
 def cmd_doctor() -> int:
     registry = load()
-    present = {r for s in registry.values() if (r := repo_of(s)) and (REPOS / r).exists()}
-    needed = {r for s in registry.values() if (r := repo_of(s))}
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    todo = missing_repos()
+    present = {r for r in manifest if r not in todo}
     broken = [sid for sid, s in registry.items() if repo_of(s) in present and not entry_path(s).exists()]
     tools = {t: bool(find_tool(t)) for t in ("git", "agy", "claude", "gemini", "codex")}
     print(f"Gon 홈: {HOME}")
-    print(f"스킬 {len(registry)}개 | 저장소 {len(present)}/{len(needed)} 설치 (나머지는 쓸 때 자동으로 받음)")
+    print(f"스킬 {len(registry)}개 | 저장소 {len(present)}/{len(manifest)} 설치")
+    if todo:
+        print(f"미설치: {', '.join(todo)} -> python Gon/gon.py fetch all")
     print(f"경로 깨짐: {broken or '없음'}")
+    stubs = sum(1 for f in CLAUDE_SKILLS.glob("*/SKILL.md") if STUB_MARK in f.read_text(encoding="utf-8", errors="replace"))
+    print(f"Claude Code 스킬 등록: {stubs}개{'' if stubs else ' X (python Gon/gon.py skills-sync)'}")
     up = port_busy(BACKEND_PORT) and port_busy(FRONTEND_PORT)
     print(f"서비스: {'실행 중 http://localhost:' + str(FRONTEND_PORT) if up else '꺼짐 (python Gon/gon.py run)'}")
     print("도구: " + ", ".join(f"{t}={'O' if ok else 'X'}" for t, ok in tools.items()))
     chosen = load_choice()
     print(f"적용할 AI: {', '.join(chosen) if chosen else '아직 안 정함 (python Gon/gon.py install)'}")
+    if chosen:
+        main = load_main()
+        print(f"메인 AI(서비스 대화): {main} | 서브 AI: {', '.join(n for n in chosen if n != main) or '없음'}")
     for name in chosen or []:
         p = Path.home() / TOOLS[name]["commands"][0]
         print(f"전역 /gon ({name}): {p} {'O' if p.exists() else 'X (python Gon/gon.py install)'}")
@@ -660,8 +793,10 @@ if __name__ == "__main__":
     if cmd == "pick" and len(a) > 1:
         sys.exit(cmd_pick([i for x in a[1:] for i in x.replace(",", " ").split()]))
     if cmd == "fetch" and len(a) > 1:
-        names = list(json.loads(MANIFEST.read_text(encoding="utf-8"))) if a[1] == "all" else a[1:]
-        sys.exit(1 if fetch(names) else 0)
+        failed = fetch_missing() if a[1] == "all" else fetch(a[1:])
+        if failed:
+            print(f"[gon] fetch 실패: {failed}", file=sys.stderr)
+        sys.exit(1 if failed else 0)
     if cmd == "remember" and len(a) > 1:
         sys.exit(append("MEMORY.md", " ".join(a[1:])))
     if cmd == "log":
@@ -674,6 +809,8 @@ if __name__ == "__main__":
         sys.exit(cmd_review(a[1:]))
     if cmd == "learn" and len(a) == 4:
         sys.exit(cmd_learn(*a[1:]))
+    if cmd == "skills-sync":
+        sys.exit(cmd_skills_sync())
     if cmd == "install":
         sys.exit(cmd_install(a[1:]))
     if cmd == "always" and len(a) >= 2 and a[1] in ("on", "off"):

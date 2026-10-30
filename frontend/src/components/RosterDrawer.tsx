@@ -68,7 +68,7 @@ export const RosterDrawer: React.FC<RosterDrawerProps> = ({
   });
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/30" onClick={onClose}>
+    <div className="fixed inset-0 z-50 overflow-hidden flex justify-end bg-black/60" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
@@ -122,7 +122,7 @@ export const RosterDrawer: React.FC<RosterDrawerProps> = ({
                 onClick={() => setSelectedCluster(c)}
                 className={`h-8 px-3 rounded-full text-sm whitespace-nowrap transition-colors duration-200 ease-out ${
                   selectedCluster === c
-                    ? 'bg-accent text-white'
+                    ? 'bg-accent text-on-accent'
                     : 'bg-surface border border-line text-sub hover:text-ink'
                 }`}
               >
@@ -166,7 +166,7 @@ export const RosterDrawer: React.FC<RosterDrawerProps> = ({
                       type="button"
                       onClick={() => onSelectExpert(e, targetSlotIndex)}
                       className={`shrink-0 h-9 px-3 rounded text-sm font-medium inline-flex items-center gap-1 transition-colors duration-200 ease-out ${
-                        isAlreadyInTeam ? 'bg-surface border border-accent text-accent' : 'bg-accent text-white hover:bg-accent-hover'
+                        isAlreadyInTeam ? 'bg-surface border border-accent text-accent' : 'bg-accent text-on-accent hover:bg-accent-hover'
                       }`}
                     >
                       {isAlreadyInTeam ? (

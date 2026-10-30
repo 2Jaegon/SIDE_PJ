@@ -94,9 +94,44 @@ def test_parse_plan_truncates_over_max_experts(mock_pool):
         "reason": "많은 전문가",
         "experts": [{"id": k, "task": f"과업 {k}"} for k in all_keys]
     })
+    for depth, cap in (("fast", 4), ("normal", 8), ("deep", 16)):
+        res = pipeline._parse_plan(text, mock_pool, pipeline.team_cap(depth))
+        assert len(res["experts"]) == min(len(all_keys), cap, pipeline.MAX_EXPERTS)
+
+
+def test_team_cap_by_depth_never_exceeds_absolute_max():
+    assert pipeline.team_cap("fast") == 4
+    assert pipeline.team_cap(None) == pipeline.team_cap("normal") == 8
+    assert pipeline.team_cap("deep") == min(16, pipeline.MAX_EXPERTS)
+    assert pipeline.team_cap("unknown") == 8
+
+
+def test_parse_plan_keeps_lens_and_guesses_missing(mock_pool):
+    ids = list(mock_pool.keys())[:2]
+    text = json.dumps({"reason": "r", "experts": [{"id": ids[0], "lens": "dev"}, {"id": ids[1], "lens": "엉뚱함"}]})
     res = pipeline._parse_plan(text, mock_pool)
-    assert len(res["experts"]) <= pipeline.MAX_EXPERTS
-    assert len(res["experts"]) == min(len(all_keys), pipeline.MAX_EXPERTS)
+    assert res["experts"][0]["lens"] == "dev"
+    guessed = "dev" if mock_pool[ids[1]].get("cluster") in pipeline.DEV_CLUSTERS else "service"
+    assert res["experts"][1]["lens"] == guessed  # 잘못된 값이면 분야로 추정
+
+
+def test_prompts_carry_lens_cap_and_final_structure(mock_pool):
+    plan = pipeline._plan_prompt("요청", mock_pool, cap=16)
+    assert "상한 16명" in plan and '"lens"' in plan
+    e = {"id": "karpathy", "name": "N", "use_for": "U", "guard": "", "entry": None}
+    assert "개발자 관점" in pipeline._expert_prompt(e, "과업", "요청", lens="dev")
+    assert "지어내지" in pipeline._expert_prompt(e, "과업", "요청")  # Core 1~2와 같은 방향
+    syn = pipeline._synthesis_prompt("요청", [{"name": "a", "lens_ko": "서비스 관점", "text": "b"}])
+    for section in ("## 1. 분석", "## 2. 정리", "## 3. 시각화", "## 4. 개발", "```chart"):
+        assert section in syn
+    assert "[서비스 관점 · a의 결과]" in syn
+
+
+def test_run_events_include_lens(monkeypatch):
+    events = list(pipeline.run("서비스 기획과 개발 계획 세워줘", depth="fast"))
+    plan = next(ev for ev in events if ev["type"] == "plan")
+    assert 1 <= len(plan["experts"]) <= 4
+    assert all(x["lens"] in pipeline.LENSES for x in plan["experts"])
 
 
 def test_keyword_plan_returns_at_least_one():
@@ -116,13 +151,16 @@ def test_run_stub_mode_event_sequence():
     types = [e["type"] for e in events]
     assert types[0] == "start"
     assert types[1] == "plan"
-    assert types[-2] == "synthesis"
     assert types[-1] == "final"
 
-    # Middle events must be 'agent' events
-    agent_types = types[2:-2]
+    # plan 다음은 agent들, 그다음 synthesis, 그 뒤로 답의 글자 조각(delta)이 이어진다
+    s_idx = types.index("synthesis")
+    agent_types = types[2:s_idx]
     assert len(agent_types) >= 1
     assert all(t == "agent" for t in agent_types)
+    deltas = events[s_idx + 1:-1]
+    assert deltas and all(e["type"] == "delta" for e in deltas)
+    assert "".join(e["text"] for e in deltas) == events[-1]["data"]["final_content"]
 
     # Final event contains complete data
     final_event = events[-1]
@@ -177,8 +215,62 @@ def test_plan_prompt_asks_for_terms_of_multi_skill_experts(mock_pool):
     assert "taste" not in line
 
 
-def test_expert_prompt_keeps_plain_text_and_no_tool_rules():
+def test_expert_prompt_structure_and_depth():
     e = {"id": "karpathy", "name": "N", "use_for": "U", "guard": "", "entry": None}
-    prompt = pipeline._expert_prompt(e, "과업", "요청")
-    assert "마크다운 기호" in prompt and "평문" in prompt
-    assert "명령도 실행하지" in prompt
+    prompt = pipeline._expert_prompt(e, "과업", "요청", sub_question="세부 질문")
+    assert "과업" in prompt and "요청" in prompt
+    assert "세부 질문" in prompt
+    assert "마크다운 표" in prompt
+
+
+def test_parse_plan_direct_route_allows_no_experts(mock_pool):
+    plan = pipeline._parse_plan('{"route": "direct", "intent": "인사", "reason": "바로 답", "experts": [{"id": "karpathy"}]}', mock_pool)
+    assert plan["route"] == "direct"
+    assert plan["experts"] == []
+
+
+def test_parse_plan_defaults_to_team(mock_pool):
+    plan = pipeline._parse_plan('{"intent": "x", "reason": "y", "experts": [{"id": "karpathy"}]}', mock_pool)
+    assert plan["route"] == "team"
+
+
+def test_history_block_keeps_recent_turns_and_truncates():
+    history = [{"role": "user", "content": f"질문{i}"} for i in range(30)] + [{"role": "assistant", "content": "가" * 5000}]
+    block = pipeline._history_block(history)
+    assert block.startswith("<이전 대화>")
+    assert "질문0" not in block  # 오래된 것은 빠진다
+    assert "[Gon] " + "가" * pipeline.HISTORY_CHARS + " …(생략)" in block
+    assert pipeline._history_block([]) == ""
+
+
+def test_history_reaches_every_prompt(mock_pool):
+    ctx = pipeline._history_block([{"role": "user", "content": "삼성전자 분석해줘"}, {"role": "assistant", "content": "보고서"}])
+    e = {"id": "karpathy", "name": "N", "use_for": "U", "guard": "", "kind": "skill"}
+    assert "삼성전자 분석해줘" in pipeline._plan_prompt("표로 다시", mock_pool, ctx)
+    assert "삼성전자 분석해줘" in pipeline._direct_prompt("표로 다시", ctx)
+    assert "삼성전자 분석해줘" in pipeline._synthesis_prompt("표로 다시", [{"name": "a", "text": "b"}], context=ctx)
+
+
+def test_run_direct_route_streams_answer(monkeypatch):
+    monkeypatch.setattr(pipeline.llm, "available", lambda: True)
+    monkeypatch.setattr(pipeline.llm, "ask", lambda *a, **k: '{"route": "direct", "intent": "인사", "reason": "바로 답", "experts": []}')
+    monkeypatch.setattr(pipeline.llm, "stream", lambda *a, **k: iter(["안녕", "하세요"]))
+    events = list(pipeline.run("안녕", history=[{"role": "user", "content": "이전"}]))
+    types = [e["type"] for e in events]
+    assert types == ["start", "plan", "synthesis", "delta", "delta", "final"]
+    assert events[1]["route"] == "direct" and events[1]["experts"] == []
+    assert events[-1]["data"]["final_content"] == "안녕하세요"
+    assert events[-1]["data"]["route"] == "direct"
+
+
+def test_run_direct_route_error_when_no_answer(monkeypatch):
+    monkeypatch.setattr(pipeline.llm, "available", lambda: True)
+    monkeypatch.setattr(pipeline.llm, "ask", lambda *a, **k: '{"route": "direct", "intent": "x", "reason": "y", "experts": []}')
+
+    def boom(*a, **k):
+        raise pipeline.llm.LLMError("빈 응답")
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(pipeline.llm, "stream", boom)
+    events = list(pipeline.run("안녕"))
+    assert events[-1]["type"] == "error"

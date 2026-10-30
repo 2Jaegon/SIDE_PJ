@@ -6,17 +6,26 @@ export default {
   ],
   theme: {
     extend: {
-      // 밝은 중성 바탕 + 초록 계열 포인트 한 가지. 색은 데이터·상태·주 행동에만 쓴다.
+      // 값은 index.css의 CSS 변수(라이트/다크). 금색 포인트 한 가지는 데이터·상태·주 행동에만 쓴다.
       colors: {
-        ground: '#f5f5f3',
-        surface: '#ffffff',
-        sunken: '#ececea',
-        line: '#e0e0dc',
-        ink: '#1a1a18',
-        sub: '#53524d',
-        faint: '#6a6963',
-        accent: { DEFAULT: '#0b6b5c', hover: '#095649', soft: '#e1f0ec' },
-        danger: { DEFAULT: '#a33a2a', soft: '#f9e8e4' },
+        ground: 'rgb(var(--c-ground) / <alpha-value>)',
+        surface: 'rgb(var(--c-surface) / <alpha-value>)',
+        sunken: 'rgb(var(--c-sunken) / <alpha-value>)',
+        raised: 'rgb(var(--c-raised) / <alpha-value>)',
+        line: 'rgb(var(--c-line) / <alpha-value>)',
+        ink: 'rgb(var(--c-ink) / <alpha-value>)',
+        sub: 'rgb(var(--c-sub) / <alpha-value>)',
+        faint: 'rgb(var(--c-faint) / <alpha-value>)',
+        'on-accent': 'rgb(var(--c-on-accent) / <alpha-value>)',
+        accent: {
+          DEFAULT: 'rgb(var(--c-accent) / <alpha-value>)',
+          hover: 'rgb(var(--c-accent-hover) / <alpha-value>)',
+          soft: 'rgb(var(--c-accent-soft) / <alpha-value>)',
+        },
+        danger: {
+          DEFAULT: 'rgb(var(--c-danger) / <alpha-value>)',
+          soft: 'rgb(var(--c-danger-soft) / <alpha-value>)',
+        },
       },
       fontFamily: {
         sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],

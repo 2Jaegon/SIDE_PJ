@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getTheme } from '../theme';
 import { Copy, Check, Download } from 'lucide-react';
 import { DeskData } from './OfficeFloor';
 
@@ -24,32 +25,36 @@ function drawCard(query: string, team: DeskData[], tip: string): string | null {
   ctx.scale(scale, scale);
 
   const font = '"Pretendard Variable", Pretendard, system-ui, sans-serif';
-  ctx.fillStyle = '#ffffff';
+  const dark = getTheme() === 'dark';
+  const K = dark
+    ? { bg: '#262523', line: '#383633', faint: '#7a756b', ink: '#f0ece1', box: '#1a1918', accent: '#d97757' }
+    : { bg: '#ffffff', line: '#e6e4dd', faint: '#8e8b82', ink: '#1f1e1d', box: '#f3f1eb', accent: '#d97757' };
+  ctx.fillStyle = K.bg;
   ctx.fillRect(0, 0, W, H);
-  ctx.strokeStyle = '#e0e0dc';
+  ctx.strokeStyle = K.line;
   ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
 
-  ctx.fillStyle = '#6a6963';
+  ctx.fillStyle = K.faint;
   ctx.font = `500 12px ${font}`;
   ctx.fillText('요청', 32, 48);
-  ctx.fillStyle = '#1a1a18';
+  ctx.fillStyle = K.ink;
   ctx.font = `600 18px ${font}`;
   ctx.fillText(query.length > 34 ? `${query.slice(0, 33)}…` : query, 32, 74);
 
-  ctx.fillStyle = '#6a6963';
+  ctx.fillStyle = K.faint;
   ctx.font = `500 12px ${font}`;
   ctx.fillText('참여 전문가', 32, 112);
-  ctx.fillStyle = '#1a1a18';
+  ctx.fillStyle = K.ink;
   ctx.font = `500 14px ${font}`;
   ctx.fillText(team.map((t) => t.character_name).join(' · '), 32, 134);
 
-  ctx.fillStyle = '#ececea';
+  ctx.fillStyle = K.box;
   ctx.fillRect(32, 160, W - 64, 168);
-  ctx.fillStyle = '#0b6b5c';
+  ctx.fillStyle = K.accent;
   ctx.font = `600 13px ${font}`;
   ctx.fillText('다음엔 이렇게 질문해 보세요', 48, 188);
 
-  ctx.fillStyle = '#1a1a18';
+  ctx.fillStyle = K.ink;
   ctx.font = `400 14px ${font}`;
   let line = '';
   let y = 214;
@@ -65,7 +70,7 @@ function drawCard(query: string, team: DeskData[], tip: string): string | null {
   }
   if (y <= 316) ctx.fillText(line, 48, y);
 
-  ctx.fillStyle = '#6a6963';
+  ctx.fillStyle = K.faint;
   ctx.font = `400 12px ${font}`;
   ctx.fillText('Gon · 전국민 AI 평준화', 32, H - 28);
 

@@ -3,13 +3,53 @@
 @tailwind utilities;
 
 /* 색은 여기서 직접 적는다. @apply로 커스텀 토큰을 쓰면 개발 서버가 설정을 새로 읽지 못했을 때 CSS 전체가 500으로 죽는다. */
+/* 테마 토큰(RGB 채널). tailwind.config.js의 색이 이 변수를 읽는다. 전환은 src/theme.ts가 html[data-theme]를 바꾼다 */
+:root {
+  color-scheme: light;
+  --c-ground: 250 249 245; /* claude.ai Warm Paper Ground: #FAF9F5 */
+  --c-surface: 255 255 255; /* claude.ai Composer & Modal Card: #FFFFFF */
+  --c-sunken: 240 238 230; /* claude.ai Sidebar & User Bubble: #F0EEE6 */
+  --c-raised: 232 229 218; /* claude.ai Active / Hover Item: #E8E5DA */
+  --c-line: 229 226 216; /* claude.ai Subtle Warm Border: #E5E2D8 */
+  --c-ink: 20 20 19; /* claude.ai Primary Text: #141413 */
+  --c-sub: 102 100 94; /* claude.ai Secondary Text: #66645E */
+  --c-faint: 140 137 128; /* claude.ai Muted Text: #8C8980 */
+  --c-on-accent: 255 255 255;
+  --c-accent: 193 95 60; /* claude.ai Crail / Terracotta: #C15F3C */
+  --c-accent-hover: 171 80 48; /* claude.ai Terracotta Hover: #AB5030 */
+  --c-accent-soft: 245 234 228; /* claude.ai Soft Terracotta: #F5EAE4 */
+  --c-danger: 201 59 43; /* claude.ai Destructive Red: #C93B2B */
+  --c-danger-soft: 251 236 234;
+  --glass-bg: rgb(250, 249, 245);
+  --glass-edge: rgb(229, 226, 216);
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --c-ground: 33 32 30; /* claude.ai Dark Chat Ground: #21201E */
+  --c-surface: 43 42 39; /* claude.ai Dark Composer & Modal: #2B2A27 */
+  --c-sunken: 24 23 21; /* claude.ai Dark Sidebar: #181715 */
+  --c-raised: 50 49 45; /* claude.ai Dark Active / Hover / Bubble: #32312D */
+  --c-line: 58 56 52; /* claude.ai Dark Border: #3A3834 */
+  --c-ink: 232 228 220; /* claude.ai Dark Primary Text: #E8E4DC */
+  --c-sub: 168 164 156; /* claude.ai Dark Secondary Text: #A8A49C */
+  --c-faint: 118 114 106; /* claude.ai Dark Muted Text: #76726A */
+  --c-on-accent: 255 255 255;
+  --c-accent: 217 119 87; /* claude.ai Dark Terracotta: #D97757 */
+  --c-accent-hover: 228 135 105; /* claude.ai Dark Terracotta Hover: #E48769 */
+  --c-accent-soft: 58 39 31; /* claude.ai Dark Terracotta Soft: #3A271F */
+  --c-danger: 217 78 62; /* claude.ai Dark Destructive Red: #D94E3E */
+  --c-danger-soft: 52 28 25;
+  --glass-bg: rgb(33, 32, 30);
+  --glass-edge: rgb(58, 56, 52);
+}
+
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
   }
   body {
-    background: #f5f5f3;
-    color: #1a1a18;
+    background: rgb(var(--c-ground));
+    color: rgb(var(--c-ink));
     font-family: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     font-feature-settings: 'tnum' 1;
@@ -17,10 +57,10 @@
     overflow-wrap: anywhere;
   }
   ::selection {
-    background: #cfe6e0;
+    background: rgb(var(--c-accent) / 0.25);
   }
   :focus-visible {
-    outline: 2px solid #0b6b5c;
+    outline: 2px solid rgb(var(--c-accent));
     outline-offset: 2px;
   }
   button {
@@ -38,31 +78,6 @@
 }
 .working-dot {
   animation: breathe 1.6s ease-in-out infinite;
-}
-
-/* 일하는 에이전트: 모니터 줄이 타이핑되듯 늘었다 줄고, 몸이 살짝 움직이며, 말풍선 점이 차례로 깜빡인다 */
-@keyframes type-line {
-  0%, 100% { transform: scaleX(0.2); }
-  55% { transform: scaleX(1); }
-}
-@keyframes fig-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(1.5px); }
-}
-@keyframes dot-pulse {
-  0%, 100% { opacity: 0.25; }
-  40% { opacity: 1; }
-}
-.type-line {
-  transform-box: fill-box;
-  transform-origin: left center;
-  animation: type-line 1.4s ease-in-out infinite;
-}
-.fig-bob {
-  animation: fig-bob 0.7s ease-in-out infinite;
-}
-.dot-pulse {
-  animation: dot-pulse 1s ease-in-out infinite;
 }
 
 /* 패널·오버레이가 열릴 때 (피드백 모션, 200ms ease-out) */
@@ -85,25 +100,6 @@
   }
 }
 
-/* 걷는 사람: 몸이 오르내리고 다리가 번갈아 움직인다. 앉아서 일할 때는 손이 번갈아 자판을 두드린다 */
-@keyframes walk-bob {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-2px); }
-}
-@keyframes leg-swing {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
-}
-@keyframes hand-tap {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-3px); }
-}
-.walk-bob { animation: walk-bob 0.5s ease-in-out infinite; }
-.leg-a { animation: leg-swing 0.5s ease-in-out infinite; }
-.leg-b { animation: leg-swing 0.5s ease-in-out 0.25s infinite; }
-.hand-a { animation: hand-tap 0.4s ease-in-out infinite; }
-.hand-b { animation: hand-tap 0.4s ease-in-out 0.2s infinite; }
-
 /* 스크롤은 되지만 스크롤바는 보이지 않는다 */
 .no-scrollbar {
   scrollbar-width: none;
@@ -115,7 +111,7 @@
 
 /* 작업 표시 오브: 코어가 숨 쉬고, 고리가 퍼져 나가고, 궤도 점이 돈다 */
 .orb-core {
-  background: radial-gradient(circle at 34% 30%, #7cc4b5 0%, #0b6b5c 58%, #064238 100%);
+  background: radial-gradient(circle at 34% 30%, #f7dcd3 0%, #d97757 58%, #8a3c22 100%);
   animation: orb-breathe var(--orb-speed, 2.6s) ease-in-out infinite;
 }
 .orb-ring {
@@ -137,4 +133,78 @@
 }
 @keyframes orb-spin {
   to { transform: rotate(360deg); }
+}
+
+
+/* 인쇄 및 PDF 저장용 스타일 (@media print) */
+@media print {
+  aside,
+  header,
+  nav,
+  form,
+  button,
+  details,
+  [role="tablist"],
+  [role="status"],
+  section[aria-label="사무실"],
+  section[aria-label="총괄 Gon"],
+  .no-print,
+  textarea,
+  input {
+    display: none !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #1a1a18 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .h-dvh {
+    height: auto !important;
+    display: block !important;
+    padding: 0 !important;
+  }
+
+  main {
+    display: block !important;
+  }
+
+  .report-viewer {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .report-viewer,
+  .report-viewer * {
+    color: #1a1a18 !important;
+    background: transparent !important;
+  }
+
+  table {
+    page-break-inside: avoid;
+    border-collapse: collapse !important;
+  }
+
+  table th, table td {
+    border: 1px solid #d1d5db !important;
+  }
+
+  h1, h2, h3 {
+    page-break-after: avoid;
+  }
+}
+
+@layer components {
+  .glass {
+    background-color: var(--glass-bg);
+  }
 }

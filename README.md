@@ -11,7 +11,22 @@ git clone https://github.com/2Jaegon/SIDE_PJ.git
 cd SIDE_PJ
 ```
 
-처음 한 번, 쓰는 AI에 Gon을 등록한다. 쓰는 AI(Claude Code, Gemini CLI·Antigravity, Codex CLI)를 물어보고, 고른 도구의 전역 설정만 바꾼다.
+쓰는 AI 도구(Claude Code, Gemini CLI·Antigravity, Codex CLI)를 이 폴더에서 열고 이렇게 말한다.
+
+```
+gon 설치해줘
+```
+
+AI가 이 폴더의 [AGENTS.md](AGENTS.md)(Claude Code는 `CLAUDE.md`, Gemini는 `GEMINI.md`를 통해 같은 내용)를 읽고 다음을 한다.
+
+1. Git, Python 3.10+, Node.js 18+ 확인
+2. 어떤 AI에 Gon을 적용할지 질문 (고른 도구의 전역 설정만 바뀐다)
+3. 전역 `/gon` 명령 등록, 스킬 저장소 전부 받기(처음에는 몇 분), 모든 세션에 상시 적용
+4. 서비스 실행(의존성 설치로 1~2분)과 상태 점검
+
+끝나면 http://localhost:5173 에서 서비스를 쓸 수 있다. 고른 AI 도구를 새로 열면 `/gon 로그인 화면 만들어줘`처럼 어느 폴더에서든 요청할 수 있다.
+
+AI 도구 없이 직접 설치하려면 스크립트를 쓴다. 쓰는 AI를 터미널에서 묻는다.
 
 ```
 ./install.sh        # macOS·Linux·WSL
@@ -19,14 +34,6 @@ cd SIDE_PJ
 ```
 
 미리 정하려면 `./install.sh --tools claude,gemini`처럼 쓴다. 나중에 바꾸거나 빼려면 `python Gon/gon.py install --tools …`, `python Gon/gon.py always off --tools codex`.
-
-그다음 AI 도구를 이 폴더에서 열고 입력한다.
-
-```
-/gon
-```
-
-에이전트가 적용되고 서비스가 시작된다(처음에는 의존성 설치로 1~2분). 주소는 http://localhost:5173. 요청을 붙이면(`/gon 로그인 화면 만들어줘`) 그 일을 수행한다.
 
 AI 도구 없이 직접 실행하려면:
 
@@ -52,7 +59,7 @@ python Gon/gon.py doctor  # 상태 점검
 
 ## 서비스: 멀티 에이전트
 
-- 요청을 보내면 **Gon**이 전문가 풀(스킬 + 프롬프트 48개)에서 필요한 전문가만 골라 과업을 나눈다. 전문가는 자기 스킬 지침을 근거로 병렬로 일하고, Gon이 결과를 하나로 합친다. 고정 인원은 없고 요청마다 편성이 달라진다(최대 `GON_MAX_EXPERTS`명, 기본 8).
+- 요청을 보내면 **Gon**이 전문가 풀(스킬 + 프롬프트 48개)에서 필요한 전문가만 골라 과업을 나눈다. 전문가는 자기 스킬 지침을 근거로 병렬로 일하고, Gon이 결과를 하나로 합친다. 고정 인원은 없고 요청 크기에 따라 편성이 달라진다. 입력창의 깊이(빠르게·보통·깊게)가 상한(4·8·16명)을 정하고, 팀은 개발자 관점과 서비스 관점으로 나뉜다. Gon은 결과를 분석 → 정리 → 시각화(차트) → 개발(코드) 순서로 합친다.
 - Antigravity CLI(`agy`)로 실행한다. 호출은 요청 1건에 `편성 1 + 전문가 N + 코칭 1 + 종합 1`번, 약 1~2분 걸리며 구독 한도를 IDE와 나눠 쓴다. `agy`가 없으면 시험용 결과를 보여 주고 화면에 그렇다고 표시한다.
   - 설치: `winget install Google.AntigravityCLI` 후 한 번 로그인
-  - 환경변수: `GON_LLM=stub`(AI 끄기, 기본 auto는 agy만 사용), `GON_LLM_WORKERS=4`(동시 호출 수), `GON_MAX_EXPERTS=8`(전문가 상한), `AGY_PATH`(agy 위치 직접 지정)
+  - 환경변수: `GON_LLM=stub`(AI 끄기, 기본 auto는 agy만 사용), `GON_LLM_WORKERS=4`(동시 호출 수), `GON_MAX_EXPERTS=16`(깊이와 무관한 절대 상한), `AGY_PATH`(agy 위치 직접 지정)

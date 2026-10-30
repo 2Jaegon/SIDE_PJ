@@ -1,0 +1,3 @@
+- [2026-10-29 11:10] [claude] [ui-ux-pro-max] [관찰] scripts/search.py는 같은 폴더의 core 모듈을 불러오므로 python -I(격리 모드)로 실행하면 ModuleNotFoundError가 난다. 이 스킬만 -I 없이 실행해야 한다
+- [2026-10-29 14:33] [claude] [taste] [관찰] design-taste-frontend 하우스 규칙(글래스·그라디언트·글로우 금지)이 사용자가 지정한 Notion 효과(유리 패널·쉐이더 그라디언트·리퀴드 로고)와 충돌했다. 사용자 지시를 따라 허용하고 보고에 적었다. /design-login은 레지스트리에 없는 이름이었다
+- [2026-10-29 16:16] [claude] [new:agy-image] [관찰] 헤드리스 agy 이미지 생성은 도구 허용 --settings + 하위 에이전트 대기 지시가 있어야 되고, 결과는 brain/<대화ID>/ 아래에 저장된다. 한 번 실패로 '불가'라고 결론 내리지 말 것

@@ -24,6 +24,9 @@ def sandbox(monkeypatch):
         monkeypatch.setattr(gon, "CHOICE", Path(tmp) / "tools.local.json")
         monkeypatch.setattr(gon, "MEMORY", Path(tmp) / "memory")
         monkeypatch.setattr(gon, "find_tool", lambda name: None)
+        monkeypatch.setattr(gon, "REPOS", Path(tmp) / "repos")  # 실제 저장소를 받거나 지우지 않는다
+        monkeypatch.setattr(gon, "fetch", lambda names: [])
+        monkeypatch.setattr(gon, "CLAUDE_SKILLS", Path(tmp) / "claude-skills")  # 이 저장소의 .claude/skills를 건드리지 않는다
 
         class NoTty:
             def isatty(self):
@@ -169,3 +172,52 @@ def test_recent_shows_open_observations(sandbox, capsys):
     capsys.readouterr()
     gon.cmd_recent(1)
     assert "열린 스킬 관찰" in capsys.readouterr().out
+
+
+def test_install_fetches_every_missing_skill_repo(sandbox, monkeypatch):
+    got = []
+    monkeypatch.setattr(gon, "fetch", lambda names: got.extend(names) or [])
+    gon.cmd_install(["--tools", "claude"])
+    assert set(got) == set(gon.json.loads(gon.MANIFEST.read_text(encoding="utf-8")))
+
+
+def test_empty_repo_folder_counts_as_missing(sandbox):
+    first = next(iter(gon.json.loads(gon.MANIFEST.read_text(encoding="utf-8"))))
+    (gon.REPOS / first).mkdir(parents=True)  # 받다 만 빈 폴더
+    assert first in gon.missing_repos()
+    (gon.REPOS / first / "x").write_text("x")
+    assert first not in gon.missing_repos()
+
+
+def test_recent_and_doctor_report_missing_repos(sandbox, capsys):
+    gon.cmd_recent()
+    assert "스킬 저장소 미설치" in capsys.readouterr().out
+    gon.cmd_doctor()
+    assert "미설치:" in capsys.readouterr().out
+
+
+def test_pick_dev_attaches_dev_core_and_project_skills(sandbox, capsys):
+    registry = gon.load()
+    expected = {s["id"] for s in registry.values() if s.get("core") in ("dev", "project")}
+    assert expected and gon.cmd_pick(["--dev"]) == 0
+    out = capsys.readouterr().out
+    for sid in expected:
+        assert f"{sid} |" in out
+    assert "[핵심-항상]" in out  # 항상 적용 핵심은 그대로 붙는다
+
+
+def test_skills_sync_registers_stubs_and_keeps_real_skills(sandbox):
+    real = gon.CLAUDE_SKILLS / "agent-browser"
+    real.mkdir(parents=True)
+    (real / "SKILL.md").write_text("---\nname: agent-browser\n---\nreal", encoding="utf-8")
+    old = gon.CLAUDE_SKILLS / "gone"
+    old.mkdir()
+    (old / "SKILL.md").write_text(gon.STUB_MARK, encoding="utf-8")
+
+    written, skipped = gon.sync_skills()
+    expected = {sid for sid, s in gon.load().items() if s["status"] != "external"}
+    assert set(written) | set(skipped) == expected and "agent-browser" in skipped
+    assert (real / "SKILL.md").read_text(encoding="utf-8").endswith("real")  # 진짜 스킬은 그대로
+    assert not old.exists()  # 레지스트리에 없는 옛 안내 파일은 정리
+    text = (gon.CLAUDE_SKILLS / "ecc-fastapi" / "SKILL.md").read_text(encoding="utf-8")
+    assert text.startswith("---\nname: ecc-fastapi\n") and "fastapi-patterns/SKILL.md" in text
