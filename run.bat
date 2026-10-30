@@ -1,4 +1,4 @@
 @echo off
 chcp 65001 >nul
-python Gon\gon.py run
+python ai\gon\gon.py run
 pause

@@ -21,16 +21,16 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Gon 에이전트는 이 저장소에 포함한다. 로컬에서 다시 만들 수 있는 것만 제외한다.
-Gon/skills/repos/
-Gon/hive/
-Gon/roster.json
-Gon/roster-backups/
-Gon/tools.local.json
-Gon/.quota.local.json
+# Gon 에이전트(ai/gon)는 이 저장소에 포함한다. 로컬에서 다시 만들 수 있는 것만 제외한다.
+ai/gon/skills/repos/
+ai/gon/hive/
+ai/gon/tools.local.json
+ai/gon/.quota.local.json
+# AI 작업물(임시 스크립트, 스크린샷, 생성 이미지)은 이 PC에만 둔다. 남길 결과물은 user/ 쪽 제자리로 옮겨 커밋한다.
+ai/workspace/*
+!ai/workspace/README.md
 # npx skills CLI가 만드는 이 PC의 설치 기록
 skills-lock.json
-Gon/workspace/munder_extracted/
 .taste-skill/
 
 # .claude는 Gon 진입점만 추적한다 (나머지는 개인 도구 설정·설치물)

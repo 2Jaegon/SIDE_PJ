@@ -5,7 +5,7 @@ set -e
 GON_HOME="${GON_HOME:-$HOME/.gon}"
 HERE="$(cd "$(dirname "$0")" 2>/dev/null && pwd)"
 
-if [ -f "$HERE/Gon/gon.py" ]; then
+if [ -f "$HERE/ai/gon/gon.py" ]; then
   GON_HOME="$HERE"
 elif [ -d "$GON_HOME/.git" ]; then
   git -C "$GON_HOME" pull --ff-only
@@ -15,5 +15,5 @@ fi
 
 PY="$(command -v python3 || command -v python)"
 # 쓰는 AI를 고른다. 터미널에서 실행하면 묻고, 미리 정하려면: ./install.sh --tools claude,gemini
-"$PY" -I "$GON_HOME/Gon/gon.py" install "$@"
-"$PY" -I "$GON_HOME/Gon/gon.py" always on
+"$PY" -I "$GON_HOME/ai/gon/gon.py" install "$@"
+"$PY" -I "$GON_HOME/ai/gon/gon.py" always on

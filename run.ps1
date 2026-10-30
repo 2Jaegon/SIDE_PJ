@@ -1,1 +1,1 @@
-python (Join-Path $PSScriptRoot "Gon\gon.py") run
+python (Join-Path $PSScriptRoot "ai\gon\gon.py") run

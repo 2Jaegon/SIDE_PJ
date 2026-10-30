@@ -1,0 +1,815 @@
+{
+ "_doc": "Gon 스킬 레지스트리 — 단일 진실 원천. entry는 ai/gon/skills/repos/ 기준 상대경로(status local은 저장소 루트 기준)이며 선택된 스킬만 그때 읽는다. status: installed(호출 가능) | reference(문서를 읽어 적용) | library(코드에서 import) | external(스킬 아님, 사용자 도구). guard가 있으면 실행 전 반드시 확인. core: always(모든 작업에 항상 적용, 지침 발췌를 route 출력에 붙임) | dev(개발·구조파악·감사 코어 스킬) | project(코드·UI 작업일 때 반드시 읽고 적용).",
+ "skills": [
+  {
+   "id": "karpathy",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "andrej-karpathy-skills/skills/karpathy-guidelines/SKILL.md",
+   "use_for": "코드 작성·수정 시 단순함 우선, 요청 범위만 변경",
+   "triggers": [
+    "코드",
+    "개발",
+    "구현",
+    "리팩토링",
+    "버그",
+    "함수",
+    "code",
+    "refactor"
+   ],
+   "synergy": [
+    "court",
+    "ponytail"
+   ],
+   "core": "always"
+  },
+  {
+   "id": "ecc",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/AGENTS.md",
+   "use_for": "Claude Code 워크플로우·에이전트 모음. 1000+ 스킬이므로 필요한 것만 검색해 읽는다",
+   "triggers": [
+    "워크플로우",
+    "에이전트",
+    "훅",
+    "자동화",
+    "workflow",
+    "hook"
+   ],
+   "synergy": [],
+   "guard": "전체를 읽지 말고 grep으로 해당 스킬만 연다",
+   "core": "dev"
+  },
+  {
+   "id": "ponytail",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ponytail/skills/ponytail/SKILL.md",
+   "use_for": "코드 감사·리뷰·기술부채 점검 (audit/review/debt)",
+   "triggers": [
+    "감사",
+    "리뷰",
+    "기술부채",
+    "레거시",
+    "audit",
+    "review",
+    "debt"
+   ],
+   "synergy": [
+    "karpathy",
+    "court"
+   ],
+   "core": "dev"
+  },
+  {
+   "id": "anthropic-skills",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "anthropics-skills/skills",
+   "use_for": "docx/pdf/pptx/xlsx 문서 제작, claude-api, 캔버스 디자인 등 공식 스킬",
+   "triggers": [
+    "워드",
+    "pdf",
+    "pptx",
+    "엑셀",
+    "docx",
+    "슬라이드",
+    "claude api"
+   ],
+   "synergy": [
+    "k-skill",
+    "taste"
+   ]
+  },
+  {
+   "id": "mcp-builder",
+   "cluster": "build",
+   "status": "installed",
+   "entry": "../../../.agents/skills/mcp-builder/SKILL.md",
+   "use_for": "외부 서비스를 연결하는 MCP 서버 제작",
+   "triggers": [
+    "mcp",
+    "서버 연동",
+    "api 연결"
+   ],
+   "synergy": [
+    "context7",
+    "karpathy"
+   ]
+  },
+  {
+   "id": "context7",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "context7/skills/context7-cli/SKILL.md",
+   "use_for": "라이브러리 최신 공식 문서 조회로 오래된 API 사용 방지",
+   "triggers": [
+    "라이브러리",
+    "공식 문서",
+    "버전",
+    "api 문서",
+    "docs"
+   ],
+   "synergy": [
+    "karpathy",
+    "mcp-builder"
+   ],
+   "core": "dev"
+  },
+  {
+   "id": "harness2",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "harness2/README.md",
+   "use_for": "에이전트 하네스 설계 참고 (모델을 둘러싼 시스템)",
+   "triggers": [
+    "하네스",
+    "에이전트 설계",
+    "harness"
+   ],
+   "synergy": []
+  },
+  {
+   "id": "k-skill",
+   "cluster": "plan",
+   "status": "installed",
+   "entry": "k-skill/AGENTS.md",
+   "use_for": "한국 서비스·공공데이터 조회(법원, 쿠팡, 통계 등)와 한국 실무 양식",
+   "triggers": [
+    "기획서",
+    "보고서",
+    "제안서",
+    "사업계획",
+    "정부지원",
+    "공문",
+    "공공데이터",
+    "경매",
+    "통계",
+    "계획서",
+    "지원사업",
+    "초안",
+    "소상공인"
+   ],
+   "synergy": [
+    "im-not-ai",
+    "court"
+   ],
+   "guard": "132개 하위 스킬 — 요청에 해당하는 폴더 하나만 연다"
+  },
+  {
+   "id": "im-not-ai",
+   "cluster": "write",
+   "status": "reference",
+   "entry": "im-not-ai/skills/humanize-korean/SKILL.md",
+   "use_for": "AI가 쓴 한글 문장을 사실·수치 그대로 두고 자연스럽게 윤문",
+   "triggers": [
+    "윤문",
+    "자연스럽게",
+    "어색",
+    "번역투",
+    "말투",
+    "카피",
+    "문구",
+    "한국어",
+    "글 다듬"
+   ],
+   "synergy": [
+    "prompts-chat"
+   ]
+  },
+  {
+   "id": "prompts-chat",
+   "cluster": "write",
+   "status": "reference",
+   "entry": "prompts-chat/plugins/claude/prompts.chat/skills/prompt-lookup/SKILL.md",
+   "use_for": "역할별 프롬프트 검색, 사용자 입력 보강",
+   "triggers": [
+    "프롬프트",
+    "페르소나",
+    "역할",
+    "prompt"
+   ],
+   "synergy": [
+    "im-not-ai"
+   ]
+  },
+  {
+   "id": "taste",
+   "cluster": "design",
+   "status": "installed",
+   "entry": "../../../.agents/skills/design-taste-frontend/SKILL.md",
+   "use_for": "랜딩·포트폴리오·대시보드의 안티슬롭 아트디렉션 (실브라우저 점검 포함)",
+   "triggers": [
+    "랜딩",
+    "웹사이트",
+    "디자인",
+    "히어로",
+    "세련",
+    "촌스러",
+    "landing",
+    "design"
+   ],
+   "synergy": [
+    "ui-ux-pro-max",
+    "im-not-ai",
+    "impeccable",
+    "motion"
+   ],
+   "core": "project"
+  },
+  {
+   "id": "ui-ux-pro-max",
+   "cluster": "design",
+   "status": "installed",
+   "entry": "ui-ux-pro-max-skill/.claude/skills/ui-ux-pro-max/SKILL.md",
+   "use_for": "컴포넌트·디자인시스템·상태(로딩/빈/에러)·반응형 완성도",
+   "triggers": [
+    "컴포넌트",
+    "디자인시스템",
+    "반응형",
+    "ux",
+    "화면설계",
+    "모바일",
+    "슬라이드"
+   ],
+   "synergy": [
+    "taste",
+    "impeccable"
+   ],
+   "core": "project"
+  },
+  {
+   "id": "impeccable",
+   "cluster": "design",
+   "status": "reference",
+   "entry": "impeccable/.claude/skills/impeccable/SKILL.md",
+   "use_for": "UI 결함 탐지·마감 QA (결정론적 규칙 검사)",
+   "triggers": [
+    "마감",
+    "접근성",
+    "qa",
+    "디테일",
+    "polish",
+    "결함"
+   ],
+   "synergy": [
+    "taste",
+    "ui-ux-pro-max"
+   ],
+   "core": "project"
+  },
+  {
+   "id": "awesome-claude-design",
+   "cluster": "design",
+   "status": "reference",
+   "entry": "awesome-claude-design/README.md",
+   "use_for": "DESIGN.md 레퍼런스 모음으로 브랜드 톤 참조",
+   "triggers": [
+    "design.md",
+    "브랜드",
+    "레퍼런스",
+    "스타일 가이드"
+   ],
+   "synergy": [
+    "taste"
+   ]
+  },
+  {
+   "id": "motion",
+   "cluster": "motion",
+   "status": "reference",
+   "entry": "design-motion-principles/skills/design-motion-principles/SKILL.md",
+   "use_for": "모션 설계·감사 (200~300ms ease-out 원칙)",
+   "triggers": [
+    "모션",
+    "애니메이션",
+    "트랜지션",
+    "인터랙션",
+    "motion",
+    "animation"
+   ],
+   "synergy": [
+    "emilkowalski",
+    "taste"
+   ]
+  },
+  {
+   "id": "emilkowalski",
+   "cluster": "motion",
+   "status": "reference",
+   "entry": "emilkowalski-skills/skills/emil-design-eng/SKILL.md",
+   "use_for": "디테일한 UI 애니메이션·성능·마이크로 인터랙션",
+   "triggers": [
+    "마이크로",
+    "토스트",
+    "sonner",
+    "애니메이션 성능"
+   ],
+   "synergy": [
+    "motion"
+   ]
+  },
+  {
+   "id": "shadergradient",
+   "cluster": "visual",
+   "status": "library",
+   "entry": "shadergradient/README.md",
+   "use_for": "움직이는 3D 그라디언트 배경 (React)",
+   "triggers": [
+    "그라디언트",
+    "배경",
+    "쉐이더",
+    "shader"
+   ],
+   "synergy": [
+    "react-three-fiber",
+    "taste"
+   ]
+  },
+  {
+   "id": "react-three-fiber",
+   "cluster": "visual",
+   "status": "library",
+   "entry": "react-three-fiber/readme.md",
+   "use_for": "React 3D 씬",
+   "triggers": [
+    "3d",
+    "three",
+    "r3f",
+    "씬"
+   ],
+   "synergy": [
+    "shadergradient"
+   ]
+  },
+  {
+   "id": "liquid-glass",
+   "cluster": "visual",
+   "status": "library",
+   "entry": "liquid-glass-js/README.md",
+   "use_for": "리퀴드 글래스 UI 효과",
+   "triggers": [
+    "글래스",
+    "유리",
+    "glass"
+   ],
+   "synergy": [
+    "taste"
+   ]
+  },
+  {
+   "id": "liquid-logo",
+   "cluster": "visual",
+   "status": "library",
+   "entry": "liquid-logo/README.md",
+   "use_for": "로고의 리퀴드 메탈 효과",
+   "triggers": [
+    "로고",
+    "메탈",
+    "logo"
+   ],
+   "synergy": [
+    "shadergradient"
+   ]
+  },
+  {
+   "id": "firecrawl",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "firecrawl/skills/firecrawl-build-scrape/SKILL.md",
+   "use_for": "웹 검색·스크랩·크롤을 클린 마크다운으로",
+   "triggers": [
+    "검색",
+    "조사",
+    "크롤",
+    "스크랩",
+    "시장조사",
+    "경쟁사",
+    "최신"
+   ],
+   "synergy": [
+    "court",
+    "graphify"
+   ],
+   "guard": "FIRECRAWL_API_KEY 필요. 키 없으면 agent-browser나 WebSearch로 대체"
+  },
+  {
+   "id": "scrapling",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "Scrapling/agent-skill/Scrapling-Skill/SKILL.md",
+   "use_for": "파이썬 스크래핑 프레임워크 (대량·동적 페이지)",
+   "triggers": [
+    "대량수집",
+    "파싱",
+    "scrapling",
+    "크롤러"
+   ],
+   "synergy": [
+    "firecrawl"
+   ],
+   "guard": "대상 사이트의 약관·robots 확인. 접근 통제 우회 금지"
+  },
+  {
+   "id": "agent-browser",
+   "cluster": "research",
+   "status": "installed",
+   "entry": "../../../.agents/skills/agent-browser/SKILL.md",
+   "use_for": "실제 브라우저로 클릭·입력·스크린샷·웹앱 테스트",
+   "triggers": [
+    "브라우저",
+    "스크린샷",
+    "로그인",
+    "폼",
+    "웹앱 테스트",
+    "browser"
+   ],
+   "synergy": [
+    "impeccable",
+    "taste"
+   ]
+  },
+  {
+   "id": "playwright-mcp",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "playwright-mcp/README.md",
+   "use_for": "Playwright 기반 브라우저 MCP (agent-browser의 대안)",
+   "triggers": [
+    "playwright",
+    "e2e"
+   ],
+   "synergy": [
+    "agent-browser"
+   ]
+  },
+  {
+   "id": "scientific",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "scientific-agent-skills/README.md",
+   "use_for": "논문·생명과학·통계 등 177개 연구 스킬",
+   "triggers": [
+    "논문",
+    "연구",
+    "통계분석",
+    "과학",
+    "실험",
+    "paper"
+   ],
+   "synergy": [
+    "court",
+    "firecrawl"
+   ],
+   "guard": "177개 중 해당 스킬만 연다"
+  },
+  {
+   "id": "graphify",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "graphify/graphify/skill.md",
+   "use_for": "코드·문서·PDF를 지식 그래프로 매핑해 구조 파악",
+   "triggers": [
+    "지식그래프",
+    "구조 파악",
+    "코드베이스 이해",
+    "관계",
+    "graphify"
+   ],
+   "synergy": [
+    "headroom",
+    "context7"
+   ],
+   "core": "dev"
+  },
+  {
+   "id": "headroom",
+   "cluster": "research",
+   "status": "reference",
+   "entry": "headroom/wiki/cli.md",
+   "use_for": "긴 로그·출력 압축으로 토큰 절약",
+   "triggers": [
+    "토큰",
+    "압축",
+    "컨텍스트 절약",
+    "로그"
+   ],
+   "synergy": [
+    "graphify"
+   ],
+   "core": "dev"
+  },
+  {
+   "id": "court",
+   "cluster": "verify",
+   "status": "reference",
+   "entry": "court-skill/skills/court/SKILL.md",
+   "use_for": "아이디어·결론을 반론 배심으로 검증 (동조 방지)",
+   "triggers": [
+    "검증",
+    "반론",
+    "약점",
+    "리스크",
+    "타당",
+    "맞아?",
+    "평가"
+   ],
+   "synergy": [
+    "k-skill",
+    "karpathy"
+   ],
+   "guard": "비용이 큼 — 중요 결정·최종 산출물에만"
+  },
+  {
+   "id": "strix",
+   "cluster": "security",
+   "status": "reference",
+   "entry": "strix/skills/owasp-top-10-testing/SKILL.md",
+   "use_for": "자기 소유 코드·앱의 보안 취약점 점검과 수정",
+   "triggers": [
+    "보안",
+    "취약점",
+    "owasp",
+    "pentest",
+    "security"
+   ],
+   "synergy": [
+    "karpathy"
+   ],
+   "guard": "본인 소유·승인된 대상만. 외부 서비스 대상 금지"
+  },
+  {
+   "id": "rea",
+   "cluster": "security",
+   "status": "reference",
+   "entry": "rea/.agents/skills/reverse-engineer-anything/SKILL.md",
+   "use_for": "합법적 분석: 보안 연구, 상호운용, 본인 소유 소프트웨어 디버깅",
+   "triggers": [
+    "역공학",
+    "리버스",
+    "바이너리",
+    "apk",
+    "분석 도구"
+   ],
+   "synergy": [
+    "strix"
+   ],
+   "guard": "DISCLAIMER 준수. 상용 소프트웨어 복제·보호 조치 우회 금지 (Munder Difflin 복제 요청은 거절됨)"
+  },
+  {
+   "id": "find-skills",
+   "cluster": "meta",
+   "status": "installed",
+   "entry": "../../../.agents/skills/find-skills/SKILL.md",
+   "use_for": "레지스트리에 없는 기능을 위한 스킬 탐색·설치",
+   "triggers": [
+    "스킬 찾",
+    "스킬 설치",
+    "find skill"
+   ],
+   "synergy": [
+    "vercel-skills"
+   ]
+  },
+  {
+   "id": "vercel-skills",
+   "cluster": "meta",
+   "status": "reference",
+   "entry": "vercel-skills/README.md",
+   "use_for": "npx skills CLI (스킬 설치·관리)",
+   "triggers": [
+    "npx skills",
+    "스킬 관리"
+   ],
+   "synergy": [
+    "find-skills"
+   ]
+  },
+  {
+   "id": "freellmapi",
+   "cluster": "meta",
+   "status": "reference",
+   "entry": "freellmapi/README.md",
+   "use_for": "무료 LLM 티어 집계 프록시 (Gon 백엔드 후보)",
+   "triggers": [
+    "무료 llm",
+    "프록시",
+    "llm 비용"
+   ],
+   "synergy": [
+    "harness2"
+   ],
+   "guard": "제3자 릴리스 바이너리 — 실행 전 출처·코드 확인. 계정·API 공유/재판매 금지"
+  },
+  {
+   "id": "designmd-extension",
+   "cluster": "design",
+   "status": "external",
+   "entry": "https://chromewebstore.google.com/detail/designmd-style-extractor/ogpdnchdjiibhobphelbbkemnnemkfma",
+   "use_for": "웹사이트 스타일을 DESIGN.md로 추출하는 크롬 확장 (사용자가 직접 사용)",
+   "triggers": [
+    "스타일 추출"
+   ],
+   "synergy": [
+    "awesome-claude-design"
+   ]
+  },
+  {
+   "id": "pixel-office",
+   "cluster": "meta",
+   "status": "external",
+   "entry": "https://every-ai-guides.vercel.app/posts/ai-pixel-office-free",
+   "use_for": "에이전트 상태 시각화 가이드 (읽을거리)",
+   "triggers": [
+    "픽셀 오피스"
+   ],
+   "synergy": []
+  },
+  {
+   "id": "ecc-verification",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/verification-loop/SKILL.md",
+   "use_for": "작업을 끝내기 전 검증 루프(빌드·테스트·리뷰·보안)를 돌린다",
+   "triggers": [
+    "검증",
+    "테스트",
+    "완료",
+    "verify"
+   ],
+   "synergy": [],
+   "core": "always"
+  },
+  {
+   "id": "ecc-coding-standards",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/coding-standards/SKILL.md",
+   "use_for": "언어 공통 코딩 표준과 가독성 규칙",
+   "triggers": [
+    "코딩 표준",
+    "컨벤션",
+    "가독성"
+   ],
+   "synergy": [],
+   "core": "always"
+  },
+  {
+   "id": "ecc-fastapi",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/fastapi-patterns/SKILL.md",
+   "use_for": "FastAPI 백엔드 설계 패턴(라우터, 의존성, 비동기, 검증)",
+   "triggers": [
+    "fastapi",
+    "백엔드",
+    "서버",
+    "api"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-react",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/react-patterns/SKILL.md",
+   "use_for": "React 컴포넌트·상태·훅 패턴",
+   "triggers": [
+    "react",
+    "리액트",
+    "컴포넌트",
+    "프론트"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-a11y",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/frontend-a11y/SKILL.md",
+   "use_for": "프론트엔드 접근성(키보드, 스크린리더, 대비)",
+   "triggers": [
+    "접근성",
+    "a11y",
+    "키보드"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-api-design",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/api-design/SKILL.md",
+   "use_for": "REST API 설계(리소스, 오류 형식, 버전)",
+   "triggers": [
+    "api 설계",
+    "rest",
+    "엔드포인트"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-code-review",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/agents/code-reviewer.md",
+   "use_for": "변경한 코드의 품질·보안·유지보수성 리뷰",
+   "triggers": [
+    "코드 리뷰",
+    "리뷰",
+    "pr"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-security-review",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/security-review/SKILL.md",
+   "use_for": "입력 검증, 인증, 비밀값 처리 등 보안 점검",
+   "triggers": [
+    "보안",
+    "취약점",
+    "인증"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-e2e",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/e2e-testing/SKILL.md",
+   "use_for": "E2E 테스트 설계와 실행",
+   "triggers": [
+    "e2e",
+    "테스트 자동화",
+    "시나리오"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "ecc-git",
+   "cluster": "build",
+   "status": "reference",
+   "entry": "ECC/skills/git-workflow/SKILL.md",
+   "use_for": "브랜치·커밋·PR 워크플로",
+   "triggers": [
+    "커밋",
+    "브랜치",
+    "git",
+    "pr"
+   ],
+   "synergy": [],
+   "core": "project"
+  },
+  {
+   "id": "agency-agents",
+   "cluster": "plan",
+   "status": "reference",
+   "entry": "agency-agents/README.md",
+   "use_for": "직무별 전문가 페르소나 약 325개(마케팅·디자인·제품·영업·재무·보안·프로젝트관리 등). 사람 직무 한 명을 맡겨야 하는 일(릴스 기획, 기획전 문구, 영업 제안 등)에서 맞는 직무 파일을 골라 그 역할로 작업",
+   "triggers": [
+    "마케팅",
+    "콘텐츠",
+    "릴스",
+    "브랜드",
+    "영업",
+    "제품 기획",
+    "기획전",
+    "직무",
+    "페르소나"
+   ],
+   "synergy": [
+    "k-skill",
+    "im-not-ai"
+   ],
+   "guard": "약 325개 파일 — 폴더(marketing, design, product, sales …)를 grep해 직무 파일 1~2개만 연다. 영어 원문이라 산출물은 한국어로 쓴다"
+  },
+  {
+   "id": "skill-observer",
+   "cluster": "meta",
+   "status": "local",
+   "entry": "ai/gon/skills/local/skill-observer/SKILL.md",
+   "use_for": "스킬이 틀렸거나 선택이 어긋난 신호(사용자 교정, 지침 위반, 낡은 지침, 반복되는 작업)를 기록하고 모아, 스킬 지침을 고치거나 새 스킬을 제안할 때",
+   "triggers": [
+    "스킬 개선",
+    "스킬 점검",
+    "관찰",
+    "교정 기록",
+    "gon observe",
+    "gon review"
+   ],
+   "synergy": [
+    "ecc-code-review"
+   ]
+  }
+ ]
+}
